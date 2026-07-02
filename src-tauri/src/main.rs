@@ -299,7 +299,10 @@ async fn start_host(app: tauri::AppHandle) -> Result<(), String> {
         while running.load(Ordering::Relaxed) {
             if let Some(frame) = capture::get_latest_frame() {
                 let b64 = general_purpose::STANDARD.encode(&frame);
-                let _ = app.emit("local-frame", b64);
+                match app.emit("local-frame", &b64) {
+                    Ok(_) => println!("[RUST DEBUG] app.emit local-frame succeeded (len: {})", b64.len()),
+                    Err(e) => println!("[RUST ERROR] app.emit local-frame failed: {:?}", e),
+                }
             }
             tokio::time::sleep(tokio::time::Duration::from_millis(33)).await;
         }
@@ -432,6 +435,11 @@ fn set_active_display(index: usize) {
     capture::set_display_index(index);
 }
 
+#[tauri::command]
+fn js_log(msg: String) {
+    println!("[JS LOG] {}", msg);
+}
+
 fn main() {
     // Start signaling server automatically in background thread
     tauri::async_runtime::spawn(async {
@@ -451,7 +459,8 @@ fn main() {
             get_displays,
             set_active_display,
             check_for_update,
-            apply_update
+            apply_update,
+            js_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

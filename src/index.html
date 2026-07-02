@@ -13,7 +13,7 @@
     <!-- Header -->
     <header class="app-header">
       <div class="logo" style="display: flex; align-items: center; gap: 8px;">
-        <img src="logo.png" alt="LinkUp" style="height: 24px; width: 24px; border-radius: 4px;">
+        <img src="logo.png" alt="LinkUp" class="logo-mark">
         <span>linkup</span>
       </div>
       
@@ -25,7 +25,7 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
-        <div class="version">Phase 3 WebRTC</div>
+        <div class="version">v0.1.5 HD WebRTC</div>
       </div>
     </header>
 
@@ -57,7 +57,7 @@
             </div>
             <div class="settings-field" id="settings-display-field">
               <label for="select-display">Capture Display</label>
-              <select id="select-display" style="background-color: var(--charcoal-03); border: 1px solid var(--border-light); border-radius: var(--rounded-btn); color: var(--text-charcoal); padding: 4px 8px; font-family: var(--font-display); font-size: 12px; height: 28px; outline: none; cursor: pointer;">
+              <select id="select-display">
                 <option value="0">Display 1 (Primary)</option>
               </select>
             </div>
@@ -67,7 +67,7 @@
       </div>
 
       <!-- ONBOARDING SCREEN (MULTIPLE SLIDES) -->
-      <section id="screen-onboarding" class="screen-view active">
+      <section id="screen-onboarding" class="screen-view">
         <div class="glass-panel onboarding-panel">
           <!-- Slide Container -->
           <div class="slide-container">
@@ -141,10 +141,36 @@
       </section>
 
       <!-- 2. MODE SELECTION -->
-      <section id="screen-selection" class="screen-view">
-        <div class="welcome-eyebrow">WebRTC P2P Desktop Control</div>
-        <h1 class="welcome-title">Select Connection Mode</h1>
-        <p class="welcome-subtitle">View and control remote screens in real-time over WebRTC, traversing NAT routers with public STUN.</p>
+      <section id="screen-selection" class="screen-view active">
+        <div class="console-hero">
+          <div class="console-copy">
+            <div class="welcome-eyebrow">LinkUp Remote Desktop</div>
+            <h1 class="welcome-title">A private screen link, without the weight.</h1>
+            <p class="welcome-subtitle">Host or join a peer-to-peer desktop session with HD WebRTC video, native input control, clipboard sync, and a compatibility stream when media capture is unavailable.</p>
+          </div>
+          <div class="console-meter" aria-hidden="true">
+            <div class="meter-header">
+              <span>Session path</span>
+              <strong>P2P</strong>
+            </div>
+            <div class="meter-wave">
+              <span style="height: 34%"></span>
+              <span style="height: 62%"></span>
+              <span style="height: 46%"></span>
+              <span style="height: 88%"></span>
+              <span style="height: 54%"></span>
+              <span style="height: 74%"></span>
+              <span style="height: 42%"></span>
+              <span style="height: 66%"></span>
+              <span style="height: 36%"></span>
+              <span style="height: 58%"></span>
+            </div>
+            <div class="meter-footer">
+              <span>HD video</span>
+              <span>Input channel</span>
+            </div>
+          </div>
+        </div>
         
         <div class="cards-grid">
           <!-- Host Card -->
@@ -157,7 +183,7 @@
               </svg>
             </div>
             <h2>Host Screen</h2>
-            <p>Allow a remote user to view and control your desktop. Generates a 6-digit connection code.</p>
+            <p>Create a six-digit pairing code, approve the viewer, then stream your selected display as a WebRTC video track.</p>
             <button class="btn card-btn">Start Hosting</button>
           </div>
 
@@ -170,9 +196,16 @@
               </svg>
             </div>
             <h2>Control Remote Screen</h2>
-            <p>Connect to another device using its 6-digit connection code to view and control it from here.</p>
+            <p>Enter a host code to receive the HD stream and send mouse, keyboard, and clipboard events over a separate control channel.</p>
             <button class="btn card-btn btn-secondary">Connect to Host</button>
           </div>
+        </div>
+
+        <div class="capability-row" aria-label="Session capabilities">
+          <span>WebRTC video</span>
+          <span>Native input</span>
+          <span>TURN ready</span>
+          <span>JPEG fallback</span>
         </div>
       </section>
 
@@ -190,9 +223,9 @@
             <label>Your Connection Code</label>
             <div class="ip-display" id="local-connection-code">------</div>
             <p class="info-help">Share this 6-digit code with the remote viewer to start the session.</p>
-            <div id="host-ip-info" style="margin-top: 15px; font-size: 13px; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border-light); padding-top: 12px; text-align: center;">
-              <span style="font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: block; margin-bottom: 4px;">Your Host IP Address</span>
-              <span id="host-ip-address" style="color: var(--text-charcoal); font-family: var(--font-mono); font-weight: 600; font-size: 16px;">...</span>
+            <div id="host-ip-info" class="host-ip-info">
+              <span class="host-ip-label">Your Host IP Address</span>
+              <span id="host-ip-address" class="host-ip-address">...</span>
             </div>
           </div>
 
@@ -239,7 +272,7 @@
         </div>
 
         <div class="remote-viewport-container" id="viewport-container">
-          <!-- The screen image stream -->
+          <video id="remote-screen-video" autoplay playsinline muted tabindex="0"></video>
           <img id="remote-screen-img" src="" alt="Waiting for remote screen stream..." tabindex="0">
         </div>
       </section>
@@ -248,32 +281,32 @@
       <div id="security-dialog" class="security-modal-overlay">
         <div class="glass-panel security-panel">
           <div class="welcome-eyebrow" style="color: #d32f2f; text-align: center;">Security Handshake</div>
-          <h3 style="text-align: center; margin-bottom: var(--spacing-md);">Incoming Connection</h3>
-          <p id="security-request-message" style="text-align: center; color: var(--text-muted); font-size: 14px; line-height: 1.5;">A remote user wants to view and control your desktop. Do you accept this request?</p>
-          <div class="button-row" style="margin-top: 24px; display: flex; gap: var(--spacing-md);">
-            <button class="btn btn-danger" id="btn-security-decline" style="flex: 1;">Decline</button>
-            <button class="btn" id="btn-security-accept" style="flex: 1;">Accept</button>
+          <h3>Incoming Connection</h3>
+          <p id="security-request-message" class="modal-message">A remote user wants to view and control your desktop. Do you accept this request?</p>
+          <div class="button-row modal-actions">
+            <button class="btn btn-danger" id="btn-security-decline">Decline</button>
+            <button class="btn" id="btn-security-accept">Accept</button>
           </div>
         </div>
       </div>
 
       <!-- Update Notification Dialog -->
       <div id="update-dialog" class="security-modal-overlay">
-        <div class="glass-panel security-panel" style="max-width: 450px; width: calc(100% - 32px);">
-          <div class="welcome-eyebrow" style="color: var(--accent-purple); text-align: center;">Software Update</div>
-          <h3 id="update-title" style="text-align: center; margin-bottom: 12px; font-size: 18px;">Update Available</h3>
-          <div id="update-details" style="font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 16px; max-height: 150px; overflow-y: auto; background-color: var(--charcoal-03); padding: 12px; border-radius: var(--rounded-btn); border: 1px solid var(--border-light); font-family: inherit; white-space: pre-wrap;">
+        <div class="glass-panel security-panel update-panel">
+          <div class="welcome-eyebrow" style="text-align: center;">Software Update</div>
+          <h3 id="update-title">Update Available</h3>
+          <div id="update-details" class="update-details">
             <!-- Release notes will be dynamically inserted here -->
           </div>
           <div id="update-progress-container" style="display: none; margin-bottom: 16px; width: 100%;">
-            <div style="font-size: 12px; margin-bottom: 6px; text-align: center; color: var(--text-charcoal);" id="update-progress-label">Downloading update...</div>
-            <div style="background-color: var(--charcoal-04); height: 6px; border-radius: 3px; overflow: hidden; width: 100%;">
-              <div id="update-progress-bar" style="background: linear-gradient(90deg, var(--accent-purple), var(--accent-indigo)); width: 0%; height: 100%; transition: width 0.3s ease;"></div>
+            <div id="update-progress-label" class="update-progress-label">Downloading update...</div>
+            <div class="update-progress-track">
+              <div id="update-progress-bar" class="update-progress-bar"></div>
             </div>
           </div>
-          <div class="button-row" id="update-button-row" style="display: flex; gap: var(--spacing-md); justify-content: stretch; width: 100%;">
-            <button class="btn btn-secondary" id="btn-update-decline" style="flex: 1;">Remind Me Later</button>
-            <button class="btn" id="btn-update-accept" style="flex: 1;">Install Update</button>
+          <div class="button-row" id="update-button-row">
+            <button class="btn btn-secondary" id="btn-update-decline">Remind Me Later</button>
+            <button class="btn" id="btn-update-accept">Install Update</button>
           </div>
         </div>
       </div>

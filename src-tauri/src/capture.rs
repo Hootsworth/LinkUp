@@ -10,6 +10,9 @@ mod macos {
     pub static LATEST_FRAME: LazyLock<Mutex<Option<Vec<u8>>>> = LazyLock::new(|| Mutex::new(None));
     pub static MACOS_STREAM: LazyLock<Mutex<Option<SCStream>>> = LazyLock::new(|| Mutex::new(None));
     pub static ACTIVE_DISPLAY_INDEX: LazyLock<Mutex<usize>> = LazyLock::new(|| Mutex::new(0));
+    const STREAM_WIDTH: u32 = 1920;
+    const STREAM_HEIGHT: u32 = 1080;
+    const JPEG_QUALITY: u8 = 78;
 
     pub fn set_display_index(index: usize) {
         let mut lock = ACTIVE_DISPLAY_INDEX.lock().unwrap();
@@ -21,6 +24,7 @@ mod macos {
 
     impl SCStreamOutputTrait for FrameHandler {
         fn did_output_sample_buffer(&self, sample: CMSampleBuffer, of_type: SCStreamOutputType) {
+            println!("[CAPTURE DEBUG] did_output_sample_buffer triggered");
             if let SCStreamOutputType::Screen = of_type {
                 if let Some(pixel_buffer) = sample.image_buffer() {
                     use screencapturekit::cv::CVPixelBufferLockFlags;
@@ -51,10 +55,8 @@ mod macos {
                             }
                         }
 
-                        // Encode RGB pixels to JPEG at low quality to stay
-                        // well under WebRTC data channel's ~256KB message limit.
                         let mut jpeg_bytes = Vec::new();
-                        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_bytes, 35);
+                        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_bytes, JPEG_QUALITY);
                         if encoder.encode(&rgb_pixels, width as u32, height as u32, image::ColorType::Rgb8).is_ok() {
                             let mut lock = LATEST_FRAME.lock().unwrap();
                             *lock = Some(jpeg_bytes);
@@ -66,6 +68,7 @@ mod macos {
     }
 
     pub fn start_capture() -> Result<(), String> {
+        println!("[CAPTURE DEBUG] start_capture invoked");
         let content = SCShareableContent::get().map_err(|e| e.to_string())?;
         let displays = content.displays();
         if displays.is_empty() {
@@ -80,10 +83,9 @@ mod macos {
             .with_excluding_windows(&[])
             .build();
 
-        // 960x540 keeps JPEG frames well under the WebRTC 256KB data channel limit
         let config = SCStreamConfiguration::new()
-            .with_width(960)
-            .with_height(540)
+            .with_width(STREAM_WIDTH)
+            .with_height(STREAM_HEIGHT)
             .with_shows_cursor(true);
 
         let mut stream = SCStream::new(&filter, &config);
@@ -117,6 +119,7 @@ mod windows {
     use dxgi_capture_rs::DXGIManager;
 
     static DXGI_MANAGER: LazyLock<Mutex<Option<DXGIManager>>> = LazyLock::new(|| Mutex::new(None));
+    const JPEG_QUALITY: u8 = 78;
 
     pub fn start_capture() -> Result<(), String> {
         let manager = DXGIManager::new(1000).map_err(|e| format!("{:?}", e))?;
@@ -145,7 +148,7 @@ mod windows {
                         rgb_bytes.push(b);
                     }
                     let mut jpeg_bytes = Vec::new();
-                    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_bytes, 35);
+                    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_bytes, JPEG_QUALITY);
                     if encoder.encode(&rgb_bytes, width as u32, height as u32, image::ColorType::Rgb8).is_ok() {
                         Some(jpeg_bytes)
                     } else {
