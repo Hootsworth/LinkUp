@@ -77,10 +77,12 @@ let currentSlideIndex = 0;
 // Polish State
 let lastSentClipboardText = "";
 let clipboardInterval = null;
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
 let savedHostCode = null;
 let savedClientId = null;
+
+// ICE candidate buffer — holds candidates that arrive at the host before
+// the user clicks Accept (before peerConnection is created).
+let iceCandidateBuffer = [];
 
 // ----------------------------------------------------
 // CONNECTION INFRASTRUCTURE SETTINGS (localStorage)
@@ -252,6 +254,7 @@ function cleanupWebRTC() {
   remoteScreenImg.src = "";
   clientError.style.display = "none";
   activeRole = null;
+  iceCandidateBuffer = []; // clear any buffered candidates from previous session
   securityDialog.classList.remove("open");
 }
 
@@ -335,10 +338,21 @@ btnModeHost.addEventListener("click", () => {
               target: senderId,
               data: { sdp: answer }
             }));
+            // Flush buffered ICE candidates that arrived before acceptance.
+            console.log(`Flushing ${iceCandidateBuffer.length} buffered ICE candidates`);
+            for (const candidate of iceCandidateBuffer) {
+              try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+              } catch (e) {
+                console.warn("Failed to add buffered ICE candidate:", e);
+              }
+            }
+            iceCandidateBuffer = [];
           };
           
           btnSecurityDecline.onclick = () => {
             securityDialog.classList.remove("open");
+            iceCandidateBuffer = []; // discard buffered candidates on decline
             sigWs.send(JSON.stringify({
               type: 'signal',
               target: senderId,
@@ -348,8 +362,14 @@ btnModeHost.addEventListener("click", () => {
             resetSession();
           };
         } else if (data.candidate) {
-          if (peerConnection) {
+          if (peerConnection && peerConnection.remoteDescription) {
+            // Peer connection is ready — apply immediately.
             await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+          } else {
+            // Peer connection not ready yet (host hasn't clicked Accept).
+            // Buffer the candidate so it can be flushed after acceptance.
+            console.log("Buffering ICE candidate (peer not ready)");
+            iceCandidateBuffer.push(data.candidate);
           }
         }
       }
@@ -578,23 +598,10 @@ function connectClientViewer() {
 
 function handleClientDisconnect(errMsg) {
   console.log("Client disconnected:", errMsg);
-  
-  if (activeRole === "client" && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-    reconnectAttempts++;
-    console.log(`Auto-reconnect triggered: attempt ${reconnectAttempts}`);
-    
-    // Clean temporary state
-    if (screenChannel) { try { screenChannel.close(); } catch(e){} }
-    if (inputChannel) { try { inputChannel.close(); } catch(e){} }
-    if (peerConnection) { try { peerConnection.close(); } catch(e){} }
-    if (sigWs) { try { sigWs.close(); } catch(e){} }
-    
-    setTimeout(() => {
-      if (activeRole === "client") {
-        connectClientViewer();
-      }
-    }, 2000);
-  } else {
+  // Show the error and let the user retry manually.
+  // Auto-reconnect is intentionally removed: it was causing the host
+  // accept/reject dialog to re-appear in a loop, confusing both users.
+  if (activeRole === "client") {
     clientError.textContent = errMsg;
     clientError.style.display = "block";
     btnClientConnect.textContent = "Connect";
