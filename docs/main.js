@@ -2,7 +2,6 @@
 const btnDownload = document.getElementById("btn-primary-download");
 const labelOs = document.getElementById("detected-os-label");
 
-// Release download base links (GitHub Releases v0.1.0)
 const RELEASE_BASE = "https://github.com/Hootsworth/LinkUp/releases/download/v0.1.0";
 const RELEASE_PAGE = "https://github.com/Hootsworth/LinkUp/releases/latest";
 
@@ -14,7 +13,6 @@ const LINKS = {
   generic: RELEASE_PAGE
 };
 
-// Check for Apple Silicon M-series GPU
 function isAppleSilicon() {
   try {
     const canvas = document.createElement("canvas");
@@ -24,8 +22,7 @@ function isAppleSilicon() {
     if (!debugInfo) return false;
     const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
     const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
-    
-    // Apple Silicon GPUs report as Apple GPU or Apple M1/M2/M3
+
     return (
       (renderer && renderer.toLowerCase().includes("apple")) ||
       (vendor && vendor.toLowerCase().includes("apple"))
@@ -37,34 +34,27 @@ function isAppleSilicon() {
 
 function detectOS() {
   const ua = navigator.userAgent.toLowerCase();
-  
-  // 1. macOS
+
   if (ua.includes("macintosh") || ua.includes("mac os")) {
     if (isAppleSilicon()) {
-      btnDownload.textContent = "Download LinkUp for macOS (Apple Silicon)";
+      btnDownload.textContent = "Download for Mac (Silicon)";
       btnDownload.href = LINKS.mac_silicon;
-      labelOs.textContent = "Detected: macOS (Apple Silicon M1/M2/M3)";
+      labelOs.textContent = "Detected: macOS (Apple Silicon)";
     } else {
-      btnDownload.textContent = "Download LinkUp for macOS (Intel)";
+      btnDownload.textContent = "Download for Mac (Intel)";
       btnDownload.href = LINKS.mac_intel;
-      labelOs.textContent = "Detected: macOS (Intel processor)";
+      labelOs.textContent = "Detected: macOS (Intel)";
     }
-  }
-  // 2. Windows
-  else if (ua.includes("windows") || ua.includes("win32") || ua.includes("win64")) {
-    btnDownload.textContent = "Download LinkUp for Windows (x64)";
+  } else if (ua.includes("windows") || ua.includes("win32") || ua.includes("win64")) {
+    btnDownload.textContent = "Download for Windows";
     btnDownload.href = LINKS.windows;
-    labelOs.textContent = "Detected: Windows 10 / 11";
-  }
-  // 3. Linux Ubuntu / Debian
-  else if (ua.includes("linux") || ua.includes("ubuntu") || ua.includes("debian")) {
-    btnDownload.textContent = "Download LinkUp for Linux (.deb)";
+    labelOs.textContent = "Detected: Windows 10/11";
+  } else if (ua.includes("linux") || ua.includes("ubuntu") || ua.includes("debian")) {
+    btnDownload.textContent = "Download for Linux";
     btnDownload.href = LINKS.linux;
-    labelOs.textContent = "Detected: Linux (Ubuntu / Debian x64)";
-  }
-  // 4. Fallback (Generic view releases)
-  else {
-    btnDownload.textContent = "View all releases on GitHub";
+    labelOs.textContent = "Detected: Linux (Debian)";
+  } else {
+    btnDownload.textContent = "View all releases";
     btnDownload.href = LINKS.generic;
     labelOs.textContent = "Supported platforms: macOS, Windows, Linux";
   }
@@ -84,7 +74,6 @@ function handleRouting() {
     navHome.classList.remove("active");
     navFeatures.classList.add("active");
   } else {
-    // Default to Home Screen
     featuresScreen.classList.remove("active");
     homeScreen.classList.add("active");
     navFeatures.classList.remove("active");
@@ -92,7 +81,6 @@ function handleRouting() {
   }
 }
 
-// Event Listeners
 window.addEventListener("hashchange", handleRouting);
 window.addEventListener("DOMContentLoaded", () => {
   detectOS();
