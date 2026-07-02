@@ -77,6 +77,16 @@ fn read_clipboard() -> Result<String, String> {
             .map_err(|e| e.to_string())?;
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let output = std::process::Command::new("xclip")
+            .args(&["-selection", "clipboard", "-o"])
+            .output();
+        match output {
+            Ok(out) => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
+            Err(_) => Ok("".to_string())
+        }
+    }
 }
 
 #[tauri::command]
@@ -108,6 +118,21 @@ fn write_clipboard(text: String) -> Result<(), String> {
         child.wait().map_err(|e| e.to_string())?;
         Ok(())
     }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        use std::io::Write;
+        let child = std::process::Command::new("xclip")
+            .args(&["-selection", "clipboard"])
+            .stdin(std::process::Stdio::piped())
+            .spawn();
+        if let Ok(mut c) = child {
+            if let Some(mut stdin) = c.stdin.take() {
+                let _ = stdin.write_all(text.as_bytes());
+            }
+            let _ = c.wait();
+        }
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -124,6 +149,10 @@ fn get_displays() -> Result<Vec<String>, String> {
         Ok(list)
     }
     #[cfg(target_os = "windows")]
+    {
+        Ok(vec!["Display 1 (Primary)".to_string()])
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         Ok(vec!["Display 1 (Primary)".to_string()])
     }

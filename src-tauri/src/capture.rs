@@ -168,3 +168,18 @@ pub use macos::{get_latest_frame, start_capture, stop_capture, set_display_index
 
 #[cfg(target_os = "windows")]
 pub use windows::{get_latest_frame, start_capture, stop_capture, set_display_index};
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+mod fallback {
+    pub fn start_capture() -> Result<(), String> {
+        Ok(())
+    }
+    pub fn stop_capture() {}
+    pub fn get_latest_frame() -> Option<Vec<u8>> {
+        None
+    }
+    pub fn set_display_index(_index: usize) {}
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub use fallback::{get_latest_frame, start_capture, stop_capture, set_display_index};
