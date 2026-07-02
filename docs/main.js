@@ -2,14 +2,14 @@
 const btnDownload = document.getElementById("btn-primary-download");
 const labelOs = document.getElementById("detected-os-label");
 
-const RELEASE_BASE = "https://github.com/Hootsworth/LinkUp/releases/download/v0.1.0";
+const RELEASE_BASE = "https://github.com/Hootsworth/LinkUp/releases/download/v0.1.1";
 const RELEASE_PAGE = "https://github.com/Hootsworth/LinkUp/releases/latest";
 
 const LINKS = {
-  mac_silicon: `${RELEASE_BASE}/LinkUp_0.1.0_aarch64.dmg`,
-  mac_intel: `${RELEASE_BASE}/LinkUp_0.1.0_x64.dmg`,
-  windows: `${RELEASE_BASE}/LinkUp_0.1.0_x64-setup.exe`,
-  linux: `${RELEASE_BASE}/linkup_0.1.0_amd64.deb`,
+  mac_silicon: `${RELEASE_BASE}/LinkUp_0.1.1_aarch64.dmg`,
+  mac_intel: `${RELEASE_BASE}/LinkUp_0.1.1_x64.dmg`,
+  windows: `${RELEASE_BASE}/LinkUp_0.1.1_x64-setup.exe`,
+  linux: `${RELEASE_BASE}/linkup_0.1.1_amd64.deb`,
   generic: RELEASE_PAGE
 };
 
