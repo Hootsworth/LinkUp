@@ -18,13 +18,18 @@ const LINKS = {
 function isAppleSilicon() {
   try {
     const canvas = document.createElement("canvas");
-    const gl = canvas.getContext("webgl");
+    const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
     if (!gl) return false;
     const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
     if (!debugInfo) return false;
-    const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_VENDOR_ID);
+    const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+    const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+    
     // Apple Silicon GPUs report as Apple GPU or Apple M1/M2/M3
-    return renderer && renderer.toLowerCase().includes("apple");
+    return (
+      (renderer && renderer.toLowerCase().includes("apple")) ||
+      (vendor && vendor.toLowerCase().includes("apple"))
+    );
   } catch (e) {
     return false;
   }
@@ -65,5 +70,31 @@ function detectOS() {
   }
 }
 
-// Run on load
-window.addEventListener("DOMContentLoaded", detectOS);
+// Single Page View Router
+function handleRouting() {
+  const hash = window.location.hash || '#home';
+  const homeScreen = document.getElementById("screen-home");
+  const featuresScreen = document.getElementById("screen-features");
+  const navHome = document.getElementById("nav-home");
+  const navFeatures = document.getElementById("nav-features");
+
+  if (hash === '#features') {
+    homeScreen.classList.remove("active");
+    featuresScreen.classList.add("active");
+    navHome.classList.remove("active");
+    navFeatures.classList.add("active");
+  } else {
+    // Default to Home Screen
+    featuresScreen.classList.remove("active");
+    homeScreen.classList.add("active");
+    navFeatures.classList.remove("active");
+    navHome.classList.add("active");
+  }
+}
+
+// Event Listeners
+window.addEventListener("hashchange", handleRouting);
+window.addEventListener("DOMContentLoaded", () => {
+  detectOS();
+  handleRouting();
+});
