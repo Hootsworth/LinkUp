@@ -190,6 +190,10 @@
             <label>Your Connection Code</label>
             <div class="ip-display" id="local-connection-code">------</div>
             <p class="info-help">Share this 6-digit code with the remote viewer to start the session.</p>
+            <div id="host-ip-info" style="margin-top: 15px; font-size: 13px; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border-light); padding-top: 12px; text-align: center;">
+              <span style="font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: block; margin-bottom: 4px;">Your Host IP Address</span>
+              <span id="host-ip-address" style="color: var(--text-charcoal); font-family: var(--font-mono); font-weight: 600; font-size: 16px;">...</span>
+            </div>
           </div>
 
           <button class="btn btn-danger" id="btn-stop-hosting">Stop Sharing</button>
@@ -206,6 +210,12 @@
           <div class="form-group">
             <label for="input-host-code">Connection Code</label>
             <input type="text" id="input-host-code" placeholder="e.g. 123456" maxlength="6">
+          </div>
+
+          <div class="form-group" style="margin-top: 15px;">
+            <label for="input-client-sig-url">Host IP Address / Signaling URL</label>
+            <input type="text" id="input-client-sig-url" placeholder="e.g. 192.168.1.50">
+            <span class="info-help" style="margin-top: 4px; display: block; font-size: 11px; line-height: 1.4;">Copy the 'Host IP Address' displayed on the host machine. Defaults to localhost if blank.</span>
           </div>
 
           <div class="button-row">
@@ -243,6 +253,27 @@
           <div class="button-row" style="margin-top: 24px; display: flex; gap: var(--spacing-md);">
             <button class="btn btn-danger" id="btn-security-decline" style="flex: 1;">Decline</button>
             <button class="btn" id="btn-security-accept" style="flex: 1;">Accept</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Update Notification Dialog -->
+      <div id="update-dialog" class="security-modal-overlay">
+        <div class="glass-panel security-panel" style="max-width: 450px; width: calc(100% - 32px);">
+          <div class="welcome-eyebrow" style="color: var(--accent-purple); text-align: center;">Software Update</div>
+          <h3 id="update-title" style="text-align: center; margin-bottom: 12px; font-size: 18px;">Update Available</h3>
+          <div id="update-details" style="font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 16px; max-height: 150px; overflow-y: auto; background-color: var(--charcoal-03); padding: 12px; border-radius: var(--rounded-btn); border: 1px solid var(--border-light); font-family: inherit; white-space: pre-wrap;">
+            <!-- Release notes will be dynamically inserted here -->
+          </div>
+          <div id="update-progress-container" style="display: none; margin-bottom: 16px; width: 100%;">
+            <div style="font-size: 12px; margin-bottom: 6px; text-align: center; color: var(--text-charcoal);" id="update-progress-label">Downloading update...</div>
+            <div style="background-color: var(--charcoal-04); height: 6px; border-radius: 3px; overflow: hidden; width: 100%;">
+              <div id="update-progress-bar" style="background: linear-gradient(90deg, var(--accent-purple), var(--accent-indigo)); width: 0%; height: 100%; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+          <div class="button-row" id="update-button-row" style="display: flex; gap: var(--spacing-md); justify-content: stretch; width: 100%;">
+            <button class="btn btn-secondary" id="btn-update-decline" style="flex: 1;">Remind Me Later</button>
+            <button class="btn" id="btn-update-accept" style="flex: 1;">Install Update</button>
           </div>
         </div>
       </div>

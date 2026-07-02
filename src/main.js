@@ -18,11 +18,13 @@ const btnStopHosting = document.getElementById("btn-stop-hosting");
 const localConnectionCode = document.getElementById("local-connection-code");
 const hostStatusText = document.getElementById("host-status-text");
 const hostStatusDot = document.getElementById("host-status-dot");
+const hostIpAddress = document.getElementById("host-ip-address");
 
 // Client Config Page Elements
 const btnClientBack = document.getElementById("btn-client-back");
 const btnClientConnect = document.getElementById("btn-client-connect");
 const inputHostCode = document.getElementById("input-host-code");
+const inputClientSigUrl = document.getElementById("input-client-sig-url");
 const clientError = document.getElementById("client-error");
 
 // Viewport Page Elements
@@ -45,6 +47,17 @@ const securityDialog = document.getElementById("security-dialog");
 const securityRequestMessage = document.getElementById("security-request-message");
 const btnSecurityAccept = document.getElementById("btn-security-accept");
 const btnSecurityDecline = document.getElementById("btn-security-decline");
+
+// Update Notification Elements
+const updateDialog = document.getElementById("update-dialog");
+const updateTitle = document.getElementById("update-title");
+const updateDetails = document.getElementById("update-details");
+const btnUpdateAccept = document.getElementById("btn-update-accept");
+const btnUpdateDecline = document.getElementById("btn-update-decline");
+const updateProgressContainer = document.getElementById("update-progress-container");
+const updateProgressBar = document.getElementById("update-progress-bar");
+const updateProgressLabel = document.getElementById("update-progress-label");
+const updateButtonRow = document.getElementById("update-button-row");
 
 // Onboarding Elements
 const slides = Array.from(document.querySelectorAll(".onboarding-slide"));
@@ -263,7 +276,16 @@ btnModeHost.addEventListener("click", () => {
   hostStatusText.textContent = "Connecting to signaling server...";
   hostStatusDot.className = "status-dot pulsing";
   localConnectionCode.textContent = "------";
+  hostIpAddress.textContent = "Fetching...";
   activeRole = "host";
+
+  // Fetch local IP address
+  invoke("get_local_ip").then((ip) => {
+    hostIpAddress.textContent = ip;
+  }).catch((err) => {
+    console.error("Failed to fetch local IP:", err);
+    hostIpAddress.textContent = "Unknown";
+  });
 
   let isRegistered = false;
 
@@ -476,7 +498,21 @@ btnClientConnect.addEventListener("click", () => {
 });
 
 function connectClientViewer() {
-  const sigUrl = inputSigUrl.value.trim() || "ws://localhost:8080";
+  const inputIp = inputClientSigUrl.value.trim();
+  let sigUrl = inputSigUrl.value.trim() || "ws://localhost:8080";
+  
+  if (inputIp) {
+    if (!inputIp.startsWith("ws://") && !inputIp.startsWith("wss://")) {
+      if (inputIp.includes(":")) {
+        sigUrl = `ws://${inputIp}`;
+      } else {
+        sigUrl = `ws://${inputIp}:8080`;
+      }
+    } else {
+      sigUrl = inputIp;
+    }
+  }
+
   clientError.style.display = "none";
   
   if (reconnectAttempts > 0) {
@@ -703,6 +739,74 @@ window.addEventListener("keydown", (e) => handleKeyEvent(e, true));
 window.addEventListener("keyup", (e) => handleKeyEvent(e, false));
 
 // ----------------------------------------------------
+// AUTO-UPDATER
+// ----------------------------------------------------
+async function checkForUpdatesSilently() {
+  try {
+    const update = await invoke("check_for_update");
+    if (update && update.update_available) {
+      showUpdateDialog(update);
+    }
+  } catch (e) {
+    console.error("Auto-updater failed checking for updates:", e);
+  }
+}
+
+function showUpdateDialog(update) {
+  updateTitle.textContent = `Update Available: ${update.latest_version}`;
+  updateDetails.textContent = `Current Version: ${update.current_version}\n\nRelease Notes:\n${update.notes || "No release notes available."}`;
+  
+  updateDialog.classList.add("open");
+  
+  btnUpdateDecline.onclick = () => {
+    updateDialog.classList.remove("open");
+  };
+  
+  btnUpdateAccept.onclick = async () => {
+    // Show download progress
+    updateButtonRow.style.display = "none";
+    updateProgressContainer.style.display = "block";
+    updateProgressBar.style.width = "0%";
+    updateProgressLabel.textContent = "Downloading installer...";
+    
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+      progress += Math.random() * 15;
+      if (progress > 95) progress = 95;
+      updateProgressBar.style.width = `${Math.floor(progress)}%`;
+    }, 400);
+    
+    try {
+      await invoke("apply_update", {
+        downloadUrl: update.download_url,
+        assetName: update.asset_name
+      });
+      clearInterval(progressInterval);
+      updateProgressBar.style.width = "100%";
+      updateProgressLabel.textContent = "Launching installer...";
+      
+      setTimeout(() => {
+        updateDialog.classList.remove("open");
+        updateButtonRow.style.display = "flex";
+        updateProgressContainer.style.display = "none";
+      }, 2000);
+    } catch (e) {
+      clearInterval(progressInterval);
+      console.error("Failed to install update:", e);
+      updateProgressLabel.textContent = "Download failed: " + e.toString();
+      updateProgressLabel.style.color = "#d32f2f";
+      
+      setTimeout(() => {
+        updateDialog.classList.remove("open");
+        updateButtonRow.style.display = "flex";
+        updateProgressContainer.style.display = "none";
+        updateProgressLabel.style.color = "var(--text-charcoal)";
+      }, 5000);
+    }
+  };
+}
+
+// ----------------------------------------------------
 // INITIALIZATION
 // ----------------------------------------------------
 window.addEventListener("DOMContentLoaded", () => {
@@ -715,4 +819,7 @@ window.addEventListener("DOMContentLoaded", () => {
   } else {
     showScreen(viewOnboarding);
   }
+
+  // Check for updates silently on startup
+  checkForUpdatesSilently();
 });
