@@ -255,8 +255,8 @@ pub use windows::{click_mouse, key_event, move_mouse};
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod fallback {
-    pub fn move_mouse(_x: i32, _y: i32) {}
-    pub fn click_mouse(_button: u32, _down: bool, _x: i32, _y: i32) {}
+    pub fn move_mouse(_x: f64, _y: f64) {}
+    pub fn click_mouse(_button: u8, _down: bool, _x: f64, _y: f64) {}
     pub fn key_event(_keycode: u16, _down: bool) {}
 }
 
