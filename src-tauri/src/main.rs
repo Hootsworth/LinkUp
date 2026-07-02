@@ -149,7 +149,7 @@ struct GithubRelease {
 }
 
 #[tauri::command]
-fn check_for_update() -> Result<serde_json::Value, String> {
+async fn check_for_update() -> Result<serde_json::Value, String> {
     let current_version = env!("CARGO_PKG_VERSION");
     let url = "https://api.github.com/repos/Hootsworth/LinkUp/releases/latest";
     
@@ -255,7 +255,10 @@ async fn apply_update(download_url: String, asset_name: String) -> Result<(), St
     
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new(&temp_file_path)
+        // Use cmd /C start to launch the installer fully detached so Windows
+        // does not complain about the file being in use by this process.
+        std::process::Command::new("cmd")
+            .args(&["/C", "start", "", temp_file_path.to_str().unwrap_or("")])
             .spawn()
             .map_err(|e| e.to_string())?;
         std::process::exit(0);

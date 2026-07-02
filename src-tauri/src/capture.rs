@@ -51,9 +51,10 @@ mod macos {
                             }
                         }
 
-                        // Encode RGB pixels to JPEG
+                        // Encode RGB pixels to JPEG at low quality to stay
+                        // well under WebRTC data channel's ~256KB message limit.
                         let mut jpeg_bytes = Vec::new();
-                        let mut encoder = image::codecs::jpeg::JpegEncoder::new(&mut jpeg_bytes);
+                        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_bytes, 35);
                         if encoder.encode(&rgb_pixels, width as u32, height as u32, image::ColorType::Rgb8).is_ok() {
                             let mut lock = LATEST_FRAME.lock().unwrap();
                             *lock = Some(jpeg_bytes);
@@ -79,10 +80,10 @@ mod macos {
             .with_excluding_windows(&[])
             .build();
 
-        // 1280x720 is ideal for Phase 1 to ensure low CPU & smooth network streaming
+        // 960x540 keeps JPEG frames well under the WebRTC 256KB data channel limit
         let config = SCStreamConfiguration::new()
-            .with_width(1280)
-            .with_height(720)
+            .with_width(960)
+            .with_height(540)
             .with_shows_cursor(true);
 
         let mut stream = SCStream::new(&filter, &config);
@@ -144,7 +145,7 @@ mod windows {
                         rgb_bytes.push(b);
                     }
                     let mut jpeg_bytes = Vec::new();
-                    let mut encoder = image::codecs::jpeg::JpegEncoder::new(&mut jpeg_bytes);
+                    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_bytes, 35);
                     if encoder.encode(&rgb_bytes, width as u32, height as u32, image::ColorType::Rgb8).is_ok() {
                         Some(jpeg_bytes)
                     } else {
