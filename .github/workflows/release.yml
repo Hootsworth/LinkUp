@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+env:
+  MACOSX_DEPLOYMENT_TARGET: '13.0'
+
 jobs:
   release:
     permissions:
@@ -39,6 +42,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MACOSX_DEPLOYMENT_TARGET: '13.0'
         with:
           tagName: v__VERSION__
           releaseName: 'LinkUp v__VERSION__'
