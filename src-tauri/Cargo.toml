@@ -1,0 +1,28 @@
+[package]
+name = "linkup"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tauri = { version = "2.0.0", features = ["devtools"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+image = { version = "0.24", default-features = false, features = ["jpeg"] }
+base64 = "0.21"
+lazy_static = "1.4"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+screencapturekit = "8.0.0"
+core-graphics = "0.23"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+dxgi-capture-rs = "1.2.2"
+windows-sys = { version = "0.52", features = [
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+] }
+
+[build-dependencies]
+tauri-build = "2.0.0"

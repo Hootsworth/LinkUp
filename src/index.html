@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkUp Remote Desktop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo" style="display: flex; align-items: center; gap: 8px;">
+        <img src="logo.png" alt="LinkUp" style="height: 24px; width: 24px; border-radius: 4px;">
+        <span>linkup</span>
+      </div>
+      
+      <div class="header-actions">
+        <!-- Settings Gear Button -->
+        <button class="btn btn-secondary btn-sm" id="btn-toggle-settings" title="Connection Settings">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+        <div class="version">Phase 3 WebRTC</div>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="workspace">
+      <!-- Ambient Visual Background Wash -->
+      <div class="atmosphere-wash"></div>
+
+      <!-- Collapsible Settings Panel -->
+      <div id="settings-panel" class="settings-drawer">
+        <div class="settings-content">
+          <h3>Connection Infrastructure</h3>
+          <div class="settings-grid">
+            <div class="settings-field">
+              <label for="input-sig-url">Signaling Server URL</label>
+              <input type="text" id="input-sig-url" value="ws://localhost:8080" placeholder="ws://...">
+            </div>
+            <div class="settings-field">
+              <label for="input-turn-url">TURN Server URL</label>
+              <input type="text" id="input-turn-url" value="" placeholder="turn:ip:port (optional)">
+            </div>
+            <div class="settings-field">
+              <label for="input-turn-user">TURN Username</label>
+              <input type="text" id="input-turn-user" value="linkupuser" placeholder="User">
+            </div>
+            <div class="settings-field">
+              <label for="input-turn-pass">TURN Password</label>
+              <input type="password" id="input-turn-pass" value="linkuppassword" placeholder="Pass">
+            </div>
+            <div class="settings-field" id="settings-display-field">
+              <label for="select-display">Capture Display</label>
+              <select id="select-display" style="background-color: var(--charcoal-03); border: 1px solid var(--border-light); border-radius: var(--rounded-btn); color: var(--text-charcoal); padding: 4px 8px; font-family: var(--font-display); font-size: 12px; height: 28px; outline: none; cursor: pointer;">
+                <option value="0">Display 1 (Primary)</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btn-save-settings" style="margin-top: 15px; align-self: flex-end;">Save Settings</button>
+        </div>
+      </div>
+
+      <!-- ONBOARDING SCREEN (MULTIPLE SLIDES) -->
+      <section id="screen-onboarding" class="screen-view active">
+        <div class="glass-panel onboarding-panel">
+          <!-- Slide Container -->
+          <div class="slide-container">
+            <!-- Slide 1: Welcome -->
+            <div class="onboarding-slide active" data-index="0">
+              <div class="slide-icon">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+              <div class="welcome-eyebrow">Welcome to LinkUp</div>
+              <h2>P2P Remote Desktop</h2>
+              <p>LinkUp enables direct, secure, and lightning-fast desktop sharing and input control across networks. Fully open-source and free.</p>
+            </div>
+
+            <!-- Slide 2: Hosting -->
+            <div class="onboarding-slide" data-index="1">
+              <div class="slide-icon">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                  <line x1="8" y1="21" x2="16" y2="21"/>
+                  <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+              </div>
+              <div class="welcome-eyebrow">Share Screen</div>
+              <h2>Host Local Sessions</h2>
+              <p>Activate Host Mode to stream your screen. It creates a secure 6-digit connection code that remote users can use to view and control your desktop.</p>
+            </div>
+
+            <!-- Slide 3: Control -->
+            <div class="onboarding-slide" data-index="2">
+              <div class="slide-icon">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/>
+                </svg>
+              </div>
+              <div class="welcome-eyebrow">Remote Control</div>
+              <h2>Viewer Mode</h2>
+              <p>Type in the host's 6-digit pairing code to view their screen. Moves, clicks, and keys are captured on your image viewport and executed on the host.</p>
+            </div>
+
+            <!-- Slide 4: WebRTC & TURN -->
+            <div class="onboarding-slide" data-index="3">
+              <div class="slide-icon">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+              </div>
+              <div class="welcome-eyebrow">Peer-to-Peer</div>
+              <h2>WebRTC & TURN Fallback</h2>
+              <p>Connections use public STUN servers to bypass NAT routers. We've added TURN server fallback configurations so screen sharing works even behind symmetric NATs.</p>
+            </div>
+          </div>
+
+          <!-- Slide Controls -->
+          <div class="onboarding-footer">
+            <button class="btn btn-secondary btn-sm" id="btn-onboard-skip">Skip</button>
+            <div class="slide-dots">
+              <span class="slide-dot active" data-index="0"></span>
+              <span class="slide-dot" data-index="1"></span>
+              <span class="slide-dot" data-index="2"></span>
+              <span class="slide-dot" data-index="3"></span>
+            </div>
+            <button class="btn btn-sm" id="btn-onboard-next">Next</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. MODE SELECTION -->
+      <section id="screen-selection" class="screen-view">
+        <div class="welcome-eyebrow">WebRTC P2P Desktop Control</div>
+        <h1 class="welcome-title">Select Connection Mode</h1>
+        <p class="welcome-subtitle">View and control remote screens in real-time over WebRTC, traversing NAT routers with public STUN.</p>
+        
+        <div class="cards-grid">
+          <!-- Host Card -->
+          <div class="card" id="btn-mode-host">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+            </div>
+            <h2>Host Screen</h2>
+            <p>Allow a remote user to view and control your desktop. Generates a 6-digit connection code.</p>
+            <button class="btn card-btn">Start Hosting</button>
+          </div>
+
+          <!-- Client Card -->
+          <div class="card" id="btn-mode-client">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/>
+              </svg>
+            </div>
+            <h2>Control Remote Screen</h2>
+            <p>Connect to another device using its 6-digit connection code to view and control it from here.</p>
+            <button class="btn card-btn btn-secondary">Connect to Host</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. HOSTING VIEW -->
+      <section id="screen-hosting" class="screen-view">
+        <div class="glass-panel">
+          <div class="welcome-eyebrow" style="text-align: center;">Hosting Server</div>
+          <h2>Screen Sharing Host</h2>
+          <div class="status-indicator">
+            <span class="status-dot pulsing" id="host-status-dot"></span>
+            <span class="status-label" id="host-status-text">Connecting to signaling...</span>
+          </div>
+
+          <div class="info-box">
+            <label>Your Connection Code</label>
+            <div class="ip-display" id="local-connection-code">------</div>
+            <p class="info-help">Share this 6-digit code with the remote viewer to start the session.</p>
+          </div>
+
+          <button class="btn btn-danger" id="btn-stop-hosting">Stop Sharing</button>
+        </div>
+      </section>
+
+      <!-- 4. CLIENT CONFIGURATION -->
+      <section id="screen-client-config" class="screen-view">
+        <div class="glass-panel">
+          <div class="welcome-eyebrow" style="text-align: center;">Pair Session</div>
+          <h2>Connect to Remote Screen</h2>
+          <p class="panel-desc">Enter the 6-digit connection code generated by the hosting machine.</p>
+
+          <div class="form-group">
+            <label for="input-host-code">Connection Code</label>
+            <input type="text" id="input-host-code" placeholder="e.g. 123456" maxlength="6">
+          </div>
+
+          <div class="button-row">
+            <button class="btn btn-secondary" id="btn-client-back">Back</button>
+            <button class="btn" id="btn-client-connect">Connect</button>
+          </div>
+          
+          <div id="client-error" class="error-msg"></div>
+        </div>
+      </section>
+
+      <!-- 5. REMOTE VIEWING WORKSPACE -->
+      <section id="screen-remote-view" class="screen-view full-screen-view">
+        <!-- Floating overlay controller -->
+        <div class="floating-controls">
+          <div class="floating-status">
+            <span class="status-dot green"></span>
+            <span id="remote-host-info">Connected</span>
+          </div>
+          <button class="btn btn-danger btn-sm" id="btn-client-disconnect">Disconnect</button>
+        </div>
+
+        <div class="remote-viewport-container" id="viewport-container">
+          <!-- The screen image stream -->
+          <img id="remote-screen-img" src="" alt="Waiting for remote screen stream..." tabindex="0">
+        </div>
+      </section>
+
+      <!-- Security Request Dialog -->
+      <div id="security-dialog" class="security-modal-overlay">
+        <div class="glass-panel security-panel">
+          <div class="welcome-eyebrow" style="color: #d32f2f; text-align: center;">Security Handshake</div>
+          <h3 style="text-align: center; margin-bottom: var(--spacing-md);">Incoming Connection</h3>
+          <p id="security-request-message" style="text-align: center; color: var(--text-muted); font-size: 14px; line-height: 1.5;">A remote user wants to view and control your desktop. Do you accept this request?</p>
+          <div class="button-row" style="margin-top: 24px; display: flex; gap: var(--spacing-md);">
+            <button class="btn btn-danger" id="btn-security-decline" style="flex: 1;">Decline</button>
+            <button class="btn" id="btn-security-accept" style="flex: 1;">Accept</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
