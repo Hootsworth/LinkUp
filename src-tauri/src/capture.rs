@@ -1,125 +1,30 @@
 #[cfg(target_os = "macos")]
 mod macos {
-    use std::sync::Mutex;
-    use std::sync::LazyLock;
-    use screencapturekit::prelude::*;
-    use screencapturekit::stream::output_trait::SCStreamOutputTrait;
-    use screencapturekit::stream::output_type::SCStreamOutputType;
-    use screencapturekit::cm::CMSampleBuffer;
-
-    pub static LATEST_FRAME: LazyLock<Mutex<Option<Vec<u8>>>> = LazyLock::new(|| Mutex::new(None));
-    pub static MACOS_STREAM: LazyLock<Mutex<Option<SCStream>>> = LazyLock::new(|| Mutex::new(None));
-    pub static ACTIVE_DISPLAY_INDEX: LazyLock<Mutex<usize>> = LazyLock::new(|| Mutex::new(0));
-    const STREAM_WIDTH: u32 = 1920;
-    const STREAM_HEIGHT: u32 = 1080;
-    const JPEG_QUALITY: u8 = 78;
-
-    pub fn set_display_index(index: usize) {
-        let mut lock = ACTIVE_DISPLAY_INDEX.lock().unwrap();
-        *lock = index;
-    }
-
-    #[derive(Clone, Copy)]
-    struct FrameHandler;
-
-    impl SCStreamOutputTrait for FrameHandler {
-        fn did_output_sample_buffer(&self, sample: CMSampleBuffer, of_type: SCStreamOutputType) {
-            println!("[CAPTURE DEBUG] did_output_sample_buffer triggered");
-            if let SCStreamOutputType::Screen = of_type {
-                if let Some(pixel_buffer) = sample.image_buffer() {
-                    use screencapturekit::cv::CVPixelBufferLockFlags;
-                    if let Ok(guard) = pixel_buffer.lock(CVPixelBufferLockFlags::READ_ONLY) {
-                        let base_address = guard.base_address();
-                        let bytes_per_row = pixel_buffer.bytes_per_row();
-                        let width = pixel_buffer.width();
-                        let height = pixel_buffer.height();
-
-                        let len = height * bytes_per_row;
-                        let ptr = base_address as *const u8;
-                        let raw_data = unsafe { std::slice::from_raw_parts(ptr, len) };
-
-                        // Convert BGRA (standard Mac format) to RGB, skipping row padding
-                        let mut rgb_pixels = Vec::with_capacity(width * height * 3);
-                        for y in 0..height {
-                            let row_start = y * bytes_per_row;
-                            for x in 0..width {
-                                let px = row_start + x * 4;
-                                if px + 2 < len {
-                                    let b = raw_data[px];
-                                    let g = raw_data[px + 1];
-                                    let r = raw_data[px + 2];
-                                    rgb_pixels.push(r);
-                                    rgb_pixels.push(g);
-                                    rgb_pixels.push(b);
-                                }
-                            }
-                        }
-
-                        let mut jpeg_bytes = Vec::new();
-                        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_bytes, JPEG_QUALITY);
-                        if encoder.encode(&rgb_pixels, width as u32, height as u32, image::ColorType::Rgb8).is_ok() {
-                            let mut lock = LATEST_FRAME.lock().unwrap();
-                            *lock = Some(jpeg_bytes);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     pub fn start_capture() -> Result<(), String> {
-        println!("[CAPTURE DEBUG] start_capture invoked");
-        let content = SCShareableContent::get().map_err(|e| e.to_string())?;
-        let displays = content.displays();
-        if displays.is_empty() {
-            return Err("No displays found".to_string());
-        }
-        
-        let index = *ACTIVE_DISPLAY_INDEX.lock().unwrap();
-        let display = if index < displays.len() { &displays[index] } else { &displays[0] };
-
-        let filter = SCContentFilter::create()
-            .with_display(display)
-            .with_excluding_windows(&[])
-            .build();
-
-        let config = SCStreamConfiguration::new()
-            .with_width(STREAM_WIDTH)
-            .with_height(STREAM_HEIGHT)
-            .with_shows_cursor(true);
-
-        let mut stream = SCStream::new(&filter, &config);
-        stream.add_output_handler(FrameHandler, SCStreamOutputType::Screen);
-        stream.start_capture().map_err(|e| e.to_string())?;
-
-        let mut lock = MACOS_STREAM.lock().unwrap();
-        *lock = Some(stream);
-
-        Ok(())
+        Err("Native macOS JPEG fallback is disabled; use the HD WebRTC screen picker.".to_string())
     }
 
-    pub fn stop_capture() {
-        let mut lock = MACOS_STREAM.lock().unwrap();
-        if let Some(stream) = lock.take() {
-            let _ = stream.stop_capture();
-        }
-        let mut frame_lock = LATEST_FRAME.lock().unwrap();
-        *frame_lock = None;
-    }
+    pub fn stop_capture() {}
 
     pub fn get_latest_frame() -> Option<Vec<u8>> {
-        LATEST_FRAME.lock().unwrap().clone()
+        None
     }
+
+    pub fn set_display_index(_index: usize) {}
+    pub fn set_quality(_q: u8) {}
 }
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use std::sync::Mutex;
-    use std::sync::LazyLock;
+    use std::sync::atomic::{AtomicU8, Ordering};
     use dxgi_capture_rs::DXGIManager;
 
     static DXGI_MANAGER: LazyLock<Mutex<Option<DXGIManager>>> = LazyLock::new(|| Mutex::new(None));
-    const JPEG_QUALITY: u8 = 78;
+    static JPEG_QUALITY: AtomicU8 = AtomicU8::new(78);
+
+    pub fn set_quality(q: u8) {
+        JPEG_QUALITY.store(q, Ordering::Relaxed);
+    }
 
     pub fn start_capture() -> Result<(), String> {
         let manager = DXGIManager::new(1000).map_err(|e| format!("{:?}", e))?;
@@ -148,7 +53,8 @@ mod windows {
                         rgb_bytes.push(b);
                     }
                     let mut jpeg_bytes = Vec::new();
-                    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_bytes, JPEG_QUALITY);
+                    let quality = JPEG_QUALITY.load(Ordering::Relaxed);
+                    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_bytes, quality);
                     if encoder.encode(&rgb_bytes, width as u32, height as u32, image::ColorType::Rgb8).is_ok() {
                         Some(jpeg_bytes)
                     } else {
@@ -168,10 +74,10 @@ mod windows {
 }
 
 #[cfg(target_os = "macos")]
-pub use macos::{get_latest_frame, start_capture, stop_capture, set_display_index};
+pub use macos::{get_latest_frame, start_capture, stop_capture, set_display_index, set_quality};
 
 #[cfg(target_os = "windows")]
-pub use windows::{get_latest_frame, start_capture, stop_capture, set_display_index};
+pub use windows::{get_latest_frame, start_capture, stop_capture, set_display_index, set_quality};
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod fallback {
@@ -183,7 +89,8 @@ mod fallback {
         None
     }
     pub fn set_display_index(_index: usize) {}
+    pub fn set_quality(_q: u8) {}
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-pub use fallback::{get_latest_frame, start_capture, stop_capture, set_display_index};
+pub use fallback::{get_latest_frame, start_capture, stop_capture, set_display_index, set_quality};

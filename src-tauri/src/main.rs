@@ -16,6 +16,7 @@ use futures_util::{StreamExt, SinkExt};
 use serde_json::Value;
 
 static CAPTURE_RUNNING: LazyLock<Arc<AtomicBool>> = LazyLock::new(|| Arc::new(AtomicBool::new(false)));
+static CAPTURE_SLEEP_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(33);
 
 // ----------------------------------------------------
 // NATIVE SIGNALING SERVER (PORT 8080)
@@ -304,7 +305,8 @@ async fn start_host(app: tauri::AppHandle) -> Result<(), String> {
                     Err(e) => println!("[RUST ERROR] app.emit local-frame failed: {:?}", e),
                 }
             }
-            tokio::time::sleep(tokio::time::Duration::from_millis(33)).await;
+            let sleep_ms = CAPTURE_SLEEP_MS.load(Ordering::Relaxed);
+            tokio::time::sleep(tokio::time::Duration::from_millis(sleep_ms)).await;
         }
         capture::stop_capture();
     });
@@ -315,6 +317,12 @@ async fn start_host(app: tauri::AppHandle) -> Result<(), String> {
 fn stop_host() {
     CAPTURE_RUNNING.store(false, Ordering::Relaxed);
     capture::stop_capture();
+}
+
+#[tauri::command]
+fn update_capture_params(quality: u8, sleep_ms: u64) {
+    capture::set_quality(quality);
+    CAPTURE_SLEEP_MS.store(sleep_ms, Ordering::Relaxed);
 }
 
 #[tauri::command]
@@ -411,14 +419,7 @@ fn write_clipboard(text: String) -> Result<(), String> {
 fn get_displays() -> Result<Vec<String>, String> {
     #[cfg(target_os = "macos")]
     {
-        use screencapturekit::prelude::SCShareableContent;
-        let content = SCShareableContent::get().map_err(|e| e.to_string())?;
-        let displays = content.displays();
-        let mut list = Vec::new();
-        for (idx, display) in displays.iter().enumerate() {
-            list.push(format!("Display {} ({}x{})", idx + 1, display.width(), display.height()));
-        }
-        Ok(list)
+        Ok(vec!["System screen picker".to_string()])
     }
     #[cfg(target_os = "windows")]
     {
@@ -460,6 +461,7 @@ fn main() {
             set_active_display,
             check_for_update,
             apply_update,
+            update_capture_params,
             js_log
         ])
         .run(tauri::generate_context!())

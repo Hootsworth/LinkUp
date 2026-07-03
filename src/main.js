@@ -29,6 +29,7 @@ const viewSelection = document.getElementById("screen-selection");
 const viewHosting = document.getElementById("screen-hosting");
 const viewClientConfig = document.getElementById("screen-client-config");
 const viewRemoteView = document.getElementById("screen-remote-view");
+const viewSettings = document.getElementById("screen-settings");
 
 // Selection Page Buttons
 const btnModeHost = document.getElementById("btn-mode-host");
@@ -56,8 +57,8 @@ const remoteHostInfo = document.getElementById("remote-host-info");
 
 // Connection Settings Panel Elements
 const btnToggleSettings = document.getElementById("btn-toggle-settings");
-const settingsPanel = document.getElementById("settings-panel");
 const btnSaveSettings = document.getElementById("btn-save-settings");
+const btnSettingsBack = document.getElementById("btn-settings-back");
 const inputSigUrl = document.getElementById("input-sig-url");
 const inputTurnUrl = document.getElementById("input-turn-url");
 const inputTurnUser = document.getElementById("input-turn-user");
@@ -87,11 +88,32 @@ const dots = Array.from(document.querySelectorAll(".slide-dot"));
 const btnOnboardSkip = document.getElementById("btn-onboard-skip");
 const btnOnboardNext = document.getElementById("btn-onboard-next");
 
+// Advanced Features HUD, Checklist & History Elements
+const checkAllowInput = document.getElementById("check-allow-input");
+const checkAllowClipboard = document.getElementById("check-allow-clipboard");
+const btnTransferFile = document.getElementById("btn-transfer-file");
+const inputFileSelect = document.getElementById("input-file-select");
+const fileProgressHud = document.getElementById("file-progress-hud");
+const fileProgressName = document.getElementById("file-progress-name");
+const fileProgressStatus = document.getElementById("file-progress-status");
+const fileProgressPercent = document.getElementById("file-progress-percent");
+const fileProgressBar = document.getElementById("file-progress-bar");
+const hudStats = document.getElementById("hud-stats");
+const hudType = document.getElementById("hud-type");
+const hudPing = document.getElementById("hud-ping");
+const hudRes = document.getElementById("hud-res");
+const hudFps = document.getElementById("hud-fps");
+const hudRate = document.getElementById("hud-rate");
+const recentSessionsContainer = document.getElementById("recent-sessions-container");
+const recentListItems = document.getElementById("recent-list-items");
+const localCursorEcho = document.getElementById("local-cursor-echo");
+
 // WebRTC & Signaling state
 let sigWs = null;
 let peerConnection = null;
 let screenChannel = null;
 let inputChannel = null;
+let fileChannel = null; // Dedicated binary file transfer datachannel
 let localTauriFrameUnlisten = null;
 let localScreenStream = null;
 let activeRole = null; // 'host' or 'client'
@@ -102,6 +124,14 @@ let lastSentClipboardText = "";
 let clipboardInterval = null;
 let savedHostCode = null;
 let savedClientId = null;
+
+// Diagnostics & File State
+let receivedChunks = [];
+let incomingFileInfo = null;
+let hudInterval = null;
+let prevBytesReceived = 0;
+let prevFramesDecoded = 0;
+let prevTimestamp = 0;
 const MAX_SCREEN_BUFFER_BYTES = 4 * 1024 * 1024;
 
 // ICE candidate buffer — holds candidates that arrive at the host before
@@ -151,15 +181,19 @@ function getIceConfiguration() {
   return { iceServers: servers };
 }
 
-// Toggle Settings Drawer
+// Settings Actions
 btnToggleSettings.addEventListener("click", () => {
-  settingsPanel.classList.toggle("open");
+  showScreen(viewSettings);
 });
 
 btnSaveSettings.addEventListener("click", () => {
   saveSettings();
-  settingsPanel.classList.remove("open");
+  showScreen(viewSelection);
   console.log("Settings saved.");
+});
+
+btnSettingsBack.addEventListener("click", () => {
+  showScreen(viewSelection);
 });
 
 // Display Discovery
@@ -238,7 +272,7 @@ function completeOnboarding() {
 
 // Page Navigation
 function showScreen(screen) {
-  [viewOnboarding, viewSelection, viewHosting, viewClientConfig, viewRemoteView].forEach(s => {
+  [viewOnboarding, viewSelection, viewHosting, viewClientConfig, viewRemoteView, viewSettings].forEach(s => {
     s.classList.remove("active");
   });
   screen.classList.add("active");
@@ -251,6 +285,11 @@ function cleanupWebRTC() {
   if (clipboardInterval) {
     clearInterval(clipboardInterval);
     clipboardInterval = null;
+  }
+  
+  if (hudInterval) {
+    clearInterval(hudInterval);
+    hudInterval = null;
   }
   
   if (localTauriFrameUnlisten) {
@@ -271,6 +310,10 @@ function cleanupWebRTC() {
     try { inputChannel.close(); } catch(e){}
     inputChannel = null;
   }
+  if (fileChannel) {
+    try { fileChannel.close(); } catch(e){}
+    fileChannel = null;
+  }
   if (peerConnection) {
     try { peerConnection.close(); } catch(e){}
     peerConnection = null;
@@ -279,6 +322,9 @@ function cleanupWebRTC() {
     try { sigWs.close(); } catch(e){}
     sigWs = null;
   }
+  
+  hideFileProgressOverlay();
+  stopKeepWebviewAlive();
   
   invoke("stop_host").catch(console.error);
   
@@ -359,6 +405,10 @@ btnModeHost.addEventListener("click", () => {
               setupHostPeerConnection(senderId);
               await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
               const usingVideoTrack = await startHostScreenShare(senderId);
+              
+              // Prevent background webview throttling on host
+              keepWebviewAlive();
+              
               const answer = await peerConnection.createAnswer();
               await peerConnection.setLocalDescription(answer);
               sigWs.send(JSON.stringify({
@@ -491,26 +541,42 @@ function setupHostPeerConnection(senderId) {
       inputChannel = channel;
       inputChannel.onmessage = (e) => {
         const inputEvent = JSON.parse(e.data);
-        if (inputEvent.type === "move") {
-          invoke("send_mouse_move", { x: inputEvent.x, y: inputEvent.y });
-        } else if (inputEvent.type === "click") {
-          invoke("send_mouse_click", {
-            button: inputEvent.button,
-            down: inputEvent.down,
-            x: inputEvent.x,
-            y: inputEvent.y
-          });
-        } else if (inputEvent.type === "key") {
-          invoke("send_key_event", {
-            keycode: inputEvent.keycode,
-            down: inputEvent.down
-          });
+        if (inputEvent.type === "move" || inputEvent.type === "click" || inputEvent.type === "key") {
+          if (checkAllowInput && !checkAllowInput.checked) {
+            return;
+          }
+          if (inputEvent.type === "move") {
+            invoke("send_mouse_move", { x: inputEvent.x, y: inputEvent.y });
+          } else if (inputEvent.type === "click") {
+            invoke("send_mouse_click", {
+              button: inputEvent.button,
+              down: inputEvent.down,
+              x: inputEvent.x,
+              y: inputEvent.y
+            });
+          } else if (inputEvent.type === "key") {
+            invoke("send_key_event", {
+              keycode: inputEvent.keycode,
+              down: inputEvent.down
+            });
+          }
         } else if (inputEvent.type === "clipboard") {
+          if (checkAllowClipboard && !checkAllowClipboard.checked) {
+            return;
+          }
           // Sync clipboard natively on Host
           invoke("write_clipboard", { text: inputEvent.text }).catch(console.error);
           lastSentClipboardText = inputEvent.text; // Prevent echo loop
+        } else if (inputEvent.type === "adapt-quality") {
+          invoke("update_capture_params", {
+            quality: inputEvent.quality,
+            sleepMs: inputEvent.sleepMs
+          }).catch(console.error);
         }
       };
+    } else if (channel.label === "file") {
+      fileChannel = channel;
+      setupFileChannelHandlers(fileChannel);
     }
   };
 }
@@ -575,25 +641,40 @@ async function startJpegFallbackStream() {
     throw new Error(`${captureErr}. Grant Screen Recording permission in System Settings.`);
   }
 
+  // Create canvas for WebRTC native video track streaming
+  const canvas = document.createElement("canvas");
+  canvas.width = 1280;
+  canvas.height = 720;
+  const ctx = canvas.getContext("2d");
+
+  // Capture canvas at 30 fps
+  const canvasStream = canvas.captureStream(30);
+  const [videoTrack] = canvasStream.getVideoTracks();
+
+  // Add the captured track to the peer connection
+  const sender = peerConnection.addTrack(videoTrack, canvasStream);
+  await tuneVideoSender(sender);
+
   let framesSent = 0;
   localTauriFrameUnlisten = await listen("local-frame", (e) => {
-    if (screenChannel && screenChannel.readyState === "open" && screenChannel.bufferedAmount < MAX_SCREEN_BUFFER_BYTES) {
-      try {
-        screenChannel.send(e.payload);
-        framesSent++;
-        if (framesSent % 30 === 0) {
-          hostStatusText.textContent = `Compatibility stream: ${framesSent} frames sent`;
-        }
-      } catch (sendErr) {
-        console.warn("Frame send error:", sendErr);
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      framesSent++;
+      if (framesSent % 30 === 0) {
+        hostStatusText.textContent = `WebRTC Video stream: ${framesSent} frames processed`;
       }
-    }
+    };
+    img.src = "data:image/jpeg;base64," + e.payload;
   });
 }
 
 function startHostClipboardPoller() {
   if (clipboardInterval) clearInterval(clipboardInterval);
   clipboardInterval = setInterval(async () => {
+    if (checkAllowClipboard && !checkAllowClipboard.checked) return;
     try {
       const text = await invoke("read_clipboard");
       if (text && text !== lastSentClipboardText) {
@@ -755,6 +836,15 @@ async function setupClientPeerConnection(targetHostCode, localClientId) {
       remoteScreenVideo.focus();
       reconnectAttempts = 0;
       
+      // Save recent connection to storage
+      saveRecentConnection(targetHostCode, inputClientSigUrl.value);
+      
+      // Prevent background webview throttling on client
+      keepWebviewAlive();
+      
+      // Start WebRTC connection HUD poller
+      startHudDiagnostics();
+      
       // Start Client Clipboard Sync
       startClientClipboardSync();
     } else if (state === "disconnected" || state === "failed" || state === "closed") {
@@ -778,6 +868,8 @@ async function setupClientPeerConnection(targetHostCode, localClientId) {
   // Create data channels
   screenChannel = peerConnection.createDataChannel("screen");
   inputChannel = peerConnection.createDataChannel("input");
+  fileChannel = peerConnection.createDataChannel("file");
+  setupFileChannelHandlers(fileChannel);
   peerConnection.addTransceiver("video", { direction: "recvonly" });
   
   screenChannel.onopen = () => {
@@ -851,11 +943,29 @@ function handleMouseMove(e) {
   if (viewRemoteView.classList.contains("active") && inputChannel && inputChannel.readyState === "open") {
     const { x, y } = getNormalizedCoordinates(e);
     inputChannel.send(JSON.stringify({ type: "move", x, y }));
+    
+    // Position local cursor echo overlay inside viewport
+    const container = document.getElementById("viewport-container");
+    if (container && localCursorEcho) {
+      const containerRect = container.getBoundingClientRect();
+      const localX = e.clientX - containerRect.left;
+      const localY = e.clientY - containerRect.top;
+      localCursorEcho.style.left = `${localX}px`;
+      localCursorEcho.style.top = `${localY}px`;
+      localCursorEcho.style.display = "block";
+    }
   }
 }
 
 remoteScreenVideo.addEventListener("mousemove", handleMouseMove);
 remoteScreenImg.addEventListener("mousemove", handleMouseMove);
+
+remoteScreenVideo.addEventListener("mouseleave", () => {
+  if (localCursorEcho) localCursorEcho.style.display = "none";
+});
+remoteScreenImg.addEventListener("mouseleave", () => {
+  if (localCursorEcho) localCursorEcho.style.display = "none";
+});
 
 function handleMouseClick(e, isDown) {
   if (viewRemoteView.classList.contains("active") && inputChannel && inputChannel.readyState === "open") {
@@ -976,12 +1086,424 @@ function showUpdateDialog(update) {
 }
 
 // ----------------------------------------------------
+// RECENT CONNECTIONS (SESSION HISTORY)
+// ----------------------------------------------------
+function saveRecentConnection(code, hostIp) {
+  if (!code) return;
+  let list = [];
+  try {
+    const stored = localStorage.getItem("linkup_recent_connections");
+    if (stored) list = JSON.parse(stored);
+  } catch (e) {
+    console.error("Error parsing recent connections", e);
+  }
+  
+  // Remove if duplicate exists
+  list = list.filter(item => item.code !== code);
+  
+  // Add new connection at start
+  list.unshift({
+    code: code,
+    hostIp: hostIp || "",
+    timestamp: Date.now()
+  });
+  
+  // Limit to 5 entries
+  if (list.length > 5) list = list.slice(0, 5);
+  
+  localStorage.setItem("linkup_recent_connections", JSON.stringify(list));
+  renderRecentConnections();
+}
+
+function renderRecentConnections() {
+  let list = [];
+  try {
+    const stored = localStorage.getItem("linkup_recent_connections");
+    if (stored) list = JSON.parse(stored);
+  } catch (e) {}
+  
+  if (!recentSessionsContainer || !recentListItems) return;
+  
+  if (list.length === 0) {
+    recentSessionsContainer.style.display = "none";
+    return;
+  }
+  
+  recentSessionsContainer.style.display = "block";
+  recentListItems.innerHTML = "";
+  
+  list.forEach(item => {
+    const div = document.createElement("div");
+    div.className = "recent-item";
+    
+    const timeStr = getRelativeTimeString(item.timestamp);
+    const displayCode = item.code.slice(0, 3) + " " + item.code.slice(3);
+    
+    div.innerHTML = `
+      <div class="recent-item-info">
+        <span class="recent-item-code">${displayCode}</span>
+        <span class="recent-item-url">${item.hostIp || "Default server"}</span>
+      </div>
+      <span class="recent-item-date">${timeStr}</span>
+    `;
+    
+    div.addEventListener("click", () => {
+      inputHostCode.value = item.code;
+      inputHostCode.dispatchEvent(new Event("input"));
+      inputClientSigUrl.value = item.hostIp;
+    });
+    
+    recentListItems.appendChild(div);
+  });
+}
+
+function getRelativeTimeString(ts) {
+  const diff = Date.now() - ts;
+  const secs = Math.floor(diff / 1000);
+  const mins = Math.floor(secs / 60);
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (secs < 60) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+}
+
+// ----------------------------------------------------
+// LATENCY & NETWORK HUD DIAGNOSTICS
+// ----------------------------------------------------
+function startHudDiagnostics() {
+  if (hudInterval) clearInterval(hudInterval);
+  
+  prevBytesReceived = 0;
+  prevFramesDecoded = 0;
+  prevTimestamp = Date.now();
+  
+  hudInterval = setInterval(async () => {
+    if (!peerConnection || peerConnection.connectionState !== "connected") {
+      clearInterval(hudInterval);
+      return;
+    }
+    
+    try {
+      const stats = await peerConnection.getStats();
+      let activeCandidatePair = null;
+      let inboundVideoStat = null;
+      
+      stats.forEach(report => {
+        if (report.type === "candidate-pair" && report.state === "succeeded") {
+          activeCandidatePair = report;
+        } else if (report.type === "inbound-rtp" && report.kind === "video") {
+          inboundVideoStat = report;
+        }
+      });
+      
+      const now = Date.now();
+      const elapsed = (now - prevTimestamp) / 1000; // in seconds
+      prevTimestamp = now;
+      
+      // 1. Connection Type
+      let connType = "P2P";
+      if (activeCandidatePair) {
+        const localCandidate = stats.get(activeCandidatePair.localCandidateId);
+        const remoteCandidate = stats.get(activeCandidatePair.remoteCandidateId);
+        if (localCandidate && (localCandidate.candidateType === "relay" || (remoteCandidate && remoteCandidate.candidateType === "relay"))) {
+          connType = "Relay (TURN)";
+        }
+      }
+      if (hudType) hudType.textContent = connType;
+      
+      // 2. Latency (Ping)
+      let ping = 0;
+      if (activeCandidatePair && activeCandidatePair.currentRoundTripTime !== undefined) {
+        ping = Math.round(activeCandidatePair.currentRoundTripTime * 1000);
+        if (hudPing) hudPing.textContent = `${ping} ms`;
+      } else {
+        if (hudPing) hudPing.textContent = "-- ms";
+      }
+      
+      // Congestion control quality & framerate adaptation based on latency
+      if (ping > 0) {
+        let quality = 78;
+        let sleepMs = 33; // 30fps ideal
+        
+        if (ping > 250) {
+          quality = 25;
+          sleepMs = 160; // 6fps
+        } else if (ping > 150) {
+          quality = 40;
+          sleepMs = 66;  // 15fps
+        } else if (ping > 80) {
+          quality = 60;
+          sleepMs = 50;  // 20fps
+        }
+        
+        // Signal host to adapt quality
+        if (inputChannel && inputChannel.readyState === "open") {
+          inputChannel.send(JSON.stringify({
+            type: "adapt-quality",
+            quality: quality,
+            sleepMs: sleepMs
+          }));
+        }
+      }
+      
+      if (inboundVideoStat) {
+        // 3. Resolution
+        if (inboundVideoStat.frameWidth && inboundVideoStat.frameHeight) {
+          if (hudRes) hudRes.textContent = `${inboundVideoStat.frameWidth}x${inboundVideoStat.frameHeight}`;
+        } else {
+          if (hudRes) hudRes.textContent = "--x--";
+        }
+        
+        // 4. FPS
+        if (inboundVideoStat.framesDecoded !== undefined) {
+          const fps = Math.round((inboundVideoStat.framesDecoded - prevFramesDecoded) / elapsed);
+          prevFramesDecoded = inboundVideoStat.framesDecoded;
+          if (hudFps) hudFps.textContent = `${fps} fps`;
+        } else {
+          if (hudFps) hudFps.textContent = "-- fps";
+        }
+        
+        // 5. Bitrate
+        if (inboundVideoStat.bytesReceived !== undefined) {
+          const rate = ((inboundVideoStat.bytesReceived - prevBytesReceived) * 8) / (1000000 * elapsed); // in Mbps
+          prevBytesReceived = inboundVideoStat.bytesReceived;
+          if (hudRate) hudRate.textContent = `${rate.toFixed(2)} Mbps`;
+        } else {
+          if (hudRate) hudRate.textContent = "-- Mbps";
+        }
+      }
+    } catch (err) {
+      console.error("Error reading connection stats HUD:", err);
+    }
+  }, 2000);
+}
+
+// ----------------------------------------------------
+// WEBRTC FILE TRANSFER CHANNEL
+// ----------------------------------------------------
+function setupFileChannelHandlers(channel) {
+  channel.binaryType = "arraybuffer";
+  
+  channel.onmessage = (event) => {
+    if (typeof event.data === "string") {
+      const msg = JSON.parse(event.data);
+      if (msg.type === "file-meta") {
+        receivedChunks = [];
+        incomingFileInfo = { name: msg.name, size: msg.size };
+        showFileProgressOverlay(msg.name, "Receiving...", 0);
+      } else if (msg.type === "file-eof") {
+        const blob = new Blob(receivedChunks);
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = incomingFileInfo.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showFileProgressOverlay(incomingFileInfo.name, "Complete", 100);
+        setTimeout(() => {
+          hideFileProgressOverlay();
+          incomingFileInfo = null;
+          receivedChunks = [];
+        }, 1500);
+      }
+    } else {
+      // Binary chunk received
+      receivedChunks.push(event.data);
+      
+      const currentBytes = receivedChunks.reduce((acc, chunk) => acc + chunk.byteLength, 0);
+      if (incomingFileInfo) {
+        const progress = Math.round((currentBytes / incomingFileInfo.size) * 100);
+        updateFileProgressOverlay(progress);
+      }
+    }
+  };
+}
+
+function triggerFileSend(file) {
+  if (!fileChannel || fileChannel.readyState !== "open") {
+    alert("P2P file transfer channel is not open yet.");
+    return;
+  }
+  
+  showFileProgressOverlay(file.name, "Sending...", 0);
+  
+  // Send file metadata
+  fileChannel.send(JSON.stringify({
+    type: "file-meta",
+    name: file.name,
+    size: file.size
+  }));
+  
+  const CHUNK_SIZE = 16384;
+  let offset = 0;
+  const fileReader = new FileReader();
+  
+  const readSlice = (o) => {
+    const slice = file.slice(offset, o + CHUNK_SIZE);
+    fileReader.readAsArrayBuffer(slice);
+  };
+  
+  fileReader.onload = (e) => {
+    const buffer = e.target.result;
+    fileChannel.send(buffer);
+    
+    offset += buffer.byteLength;
+    const progress = Math.round((offset / file.size) * 100);
+    updateFileProgressOverlay(progress);
+    
+    if (fileChannel.bufferedAmount > 1048576) { // wait if buffer > 1MB
+      setTimeout(() => readNext(), 40);
+    } else {
+      readNext();
+    }
+  };
+  
+  const readNext = () => {
+    if (offset < file.size) {
+      readSlice(offset);
+    } else {
+      // Done - send EOF
+      fileChannel.send(JSON.stringify({ type: "file-eof" }));
+      showFileProgressOverlay(file.name, "Complete", 100);
+      setTimeout(() => {
+        hideFileProgressOverlay();
+      }, 1500);
+    }
+  };
+  
+  readNext();
+}
+
+function showFileProgressOverlay(name, status, percent) {
+  if (!fileProgressHud) return;
+  fileProgressHud.style.display = "flex";
+  fileProgressName.textContent = name;
+  fileProgressStatus.textContent = status;
+  fileProgressPercent.textContent = `${percent}%`;
+  fileProgressBar.style.width = `${percent}%`;
+}
+
+function updateFileProgressOverlay(percent) {
+  if (!fileProgressPercent || !fileProgressBar) return;
+  fileProgressPercent.textContent = `${percent}%`;
+  fileProgressBar.style.width = `${percent}%`;
+}
+
+function hideFileProgressOverlay() {
+  if (fileProgressHud) fileProgressHud.style.display = "none";
+}
+
+// ----------------------------------------------------
+// WEB VIEW BACKGROUND KEEP ALIVE
+// ----------------------------------------------------
+let silentAudioInterval = null;
+let audioContext = null;
+
+function keepWebviewAlive() {
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const buffer = audioContext.createBuffer(1, audioContext.sampleRate * 2, audioContext.sampleRate);
+    
+    const playSilence = () => {
+      if (!audioContext || audioContext.state === "closed") return;
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioContext.destination);
+      source.start();
+    };
+    
+    playSilence();
+    silentAudioInterval = setInterval(playSilence, 1500);
+    console.log("Silent audio loop started to prevent background throttling.");
+  } catch (e) {
+    console.warn("Could not start silent audio loop:", e);
+  }
+}
+
+function stopKeepWebviewAlive() {
+  if (silentAudioInterval) {
+    clearInterval(silentAudioInterval);
+    silentAudioInterval = null;
+  }
+  if (audioContext) {
+    try { audioContext.close(); } catch(e){}
+    audioContext = null;
+  }
+}
+
+// ----------------------------------------------------
 // INITIALIZATION
 // ----------------------------------------------------
 window.addEventListener("DOMContentLoaded", () => {
   loadSettings();
   discoverDisplays();
   
+  // Render recent connections list
+  renderRecentConnections();
+  
+  // Segmented code slot synchronization logic
+  const codeSlots = Array.from(document.querySelectorAll(".code-slot"));
+  if (inputHostCode && codeSlots.length > 0) {
+    const segmentedContainer = document.getElementById("segmented-code-container");
+    if (segmentedContainer) {
+      segmentedContainer.addEventListener("click", () => {
+        inputHostCode.focus();
+      });
+    }
+    
+    const updateSlots = () => {
+      const val = inputHostCode.value;
+      codeSlots.forEach((slot, idx) => {
+        if (idx < val.length) {
+          slot.textContent = val[idx];
+          slot.classList.add("filled");
+        } else {
+          slot.textContent = "-";
+          slot.classList.remove("filled");
+        }
+        
+        // Highlight active slot
+        if (document.activeElement === inputHostCode && idx === val.length) {
+          slot.classList.add("active");
+        } else {
+          slot.classList.remove("active");
+        }
+      });
+    };
+    
+    inputHostCode.addEventListener("input", updateSlots);
+    inputHostCode.addEventListener("focus", updateSlots);
+    inputHostCode.addEventListener("blur", () => {
+      codeSlots.forEach(slot => slot.classList.remove("active"));
+    });
+    
+    // Initial sync
+    updateSlots();
+  }
+  
+  // Hook up file select buttons
+  if (btnTransferFile) {
+    btnTransferFile.addEventListener("click", () => {
+      inputFileSelect.click();
+    });
+  }
+  
+  if (inputFileSelect) {
+    inputFileSelect.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        triggerFileSend(file);
+      }
+    });
+  }
+
   viewOnboarding.classList.remove("active");
   showScreen(viewSelection);
 

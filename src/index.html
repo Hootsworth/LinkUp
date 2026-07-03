@@ -25,7 +25,6 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
-        <div class="version">v0.1.5 HD WebRTC</div>
       </div>
     </header>
 
@@ -34,37 +33,7 @@
       <!-- Ambient Visual Background Wash -->
       <div class="atmosphere-wash"></div>
 
-      <!-- Collapsible Settings Panel -->
-      <div id="settings-panel" class="settings-drawer">
-        <div class="settings-content">
-          <h3>Connection Infrastructure</h3>
-          <div class="settings-grid">
-            <div class="settings-field">
-              <label for="input-sig-url">Signaling Server URL</label>
-              <input type="text" id="input-sig-url" value="ws://localhost:8080" placeholder="ws://...">
-            </div>
-            <div class="settings-field">
-              <label for="input-turn-url">TURN Server URL</label>
-              <input type="text" id="input-turn-url" value="" placeholder="turn:ip:port (optional)">
-            </div>
-            <div class="settings-field">
-              <label for="input-turn-user">TURN Username</label>
-              <input type="text" id="input-turn-user" value="linkupuser" placeholder="User">
-            </div>
-            <div class="settings-field">
-              <label for="input-turn-pass">TURN Password</label>
-              <input type="password" id="input-turn-pass" value="linkuppassword" placeholder="Pass">
-            </div>
-            <div class="settings-field" id="settings-display-field">
-              <label for="select-display">Capture Display</label>
-              <select id="select-display">
-                <option value="0">Display 1 (Primary)</option>
-              </select>
-            </div>
-          </div>
-          <button class="btn btn-secondary btn-sm" id="btn-save-settings" style="margin-top: 15px; align-self: flex-end;">Save Settings</button>
-        </div>
-      </div>
+
 
       <!-- ONBOARDING SCREEN (MULTIPLE SLIDES) -->
       <section id="screen-onboarding" class="screen-view">
@@ -142,36 +111,6 @@
 
       <!-- 2. MODE SELECTION -->
       <section id="screen-selection" class="screen-view active">
-        <div class="console-hero">
-          <div class="console-copy">
-            <div class="welcome-eyebrow">LinkUp Remote Desktop</div>
-            <h1 class="welcome-title">A private screen link, without the weight.</h1>
-            <p class="welcome-subtitle">Host or join a peer-to-peer desktop session with HD WebRTC video, native input control, clipboard sync, and a compatibility stream when media capture is unavailable.</p>
-          </div>
-          <div class="console-meter" aria-hidden="true">
-            <div class="meter-header">
-              <span>Session path</span>
-              <strong>P2P</strong>
-            </div>
-            <div class="meter-wave">
-              <span style="height: 34%"></span>
-              <span style="height: 62%"></span>
-              <span style="height: 46%"></span>
-              <span style="height: 88%"></span>
-              <span style="height: 54%"></span>
-              <span style="height: 74%"></span>
-              <span style="height: 42%"></span>
-              <span style="height: 66%"></span>
-              <span style="height: 36%"></span>
-              <span style="height: 58%"></span>
-            </div>
-            <div class="meter-footer">
-              <span>HD video</span>
-              <span>Input channel</span>
-            </div>
-          </div>
-        </div>
-        
         <div class="cards-grid">
           <!-- Host Card -->
           <div class="card" id="btn-mode-host">
@@ -200,13 +139,6 @@
             <button class="btn card-btn btn-secondary">Connect to Host</button>
           </div>
         </div>
-
-        <div class="capability-row" aria-label="Session capabilities">
-          <span>WebRTC video</span>
-          <span>Native input</span>
-          <span>TURN ready</span>
-          <span>JPEG fallback</span>
-        </div>
       </section>
 
       <!-- 3. HOSTING VIEW -->
@@ -229,6 +161,18 @@
             </div>
           </div>
 
+          <div class="permissions-checklist">
+            <label style="display: block; margin-bottom: 12px; font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; text-align: center;">Session Permissions</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+              <label class="checkbox-label">
+                <input type="checkbox" id="check-allow-input" checked> Allow Control
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="check-allow-clipboard" checked> Allow Clipboard
+              </label>
+            </div>
+          </div>
+
           <button class="btn btn-danger" id="btn-stop-hosting">Stop Sharing</button>
         </div>
       </section>
@@ -240,15 +184,28 @@
           <h2>Connect to Remote Screen</h2>
           <p class="panel-desc">Enter the 6-digit connection code generated by the hosting machine.</p>
 
-          <div class="form-group">
-            <label for="input-host-code">Connection Code</label>
-            <input type="text" id="input-host-code" placeholder="e.g. 123456" maxlength="6">
+          <div class="form-group" style="display: flex; flex-direction: column; align-items: center; margin-bottom: 24px;">
+            <label style="margin-bottom: 12px;">Connection Code</label>
+            <div class="segmented-code-container" id="segmented-code-container">
+              <input type="text" id="input-host-code" class="hidden-code-input" maxlength="6" pattern="\d*" autocomplete="off">
+              <div class="code-slot-grid">
+                <div class="code-slot">-</div>
+                <div class="code-slot">-</div>
+                <div class="code-slot">-</div>
+                <div class="code-slot">-</div>
+                <div class="code-slot">-</div>
+                <div class="code-slot">-</div>
+              </div>
+            </div>
           </div>
 
-          <div class="form-group" style="margin-top: 15px;">
+          <div class="form-group" style="margin-top: 15px; margin-bottom: 24px;">
             <label for="input-client-sig-url">Host IP Address / Signaling URL</label>
-            <input type="text" id="input-client-sig-url" placeholder="e.g. 192.168.1.50">
-            <span class="info-help" style="margin-top: 4px; display: block; font-size: 11px; line-height: 1.4;">Copy the 'Host IP Address' displayed on the host machine. Defaults to localhost if blank.</span>
+            <div class="minimalist-input-group">
+              <span class="input-prefix">IP:</span>
+              <input type="text" id="input-client-sig-url" placeholder="e.g. 192.168.1.50">
+            </div>
+            <span class="info-help" style="margin-top: 6px; display: block; font-size: 11px; line-height: 1.4; text-align: left;">Copy the 'Host IP Address' displayed on the host machine. Defaults to localhost if blank.</span>
           </div>
 
           <div class="button-row">
@@ -257,6 +214,13 @@
           </div>
           
           <div id="client-error" class="error-msg"></div>
+
+          <div class="recent-sessions-container" id="recent-sessions-container" style="margin-top: 32px; border-top: 1px solid var(--hairline-strong); padding-top: 24px; width: 100%; display: none;">
+            <label style="display: block; margin-bottom: 12px; font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase;">Recent Connections</label>
+            <div class="recent-list" id="recent-list-items" style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+              <!-- Rendered programmatically -->
+            </div>
+          </div>
         </div>
       </section>
 
@@ -268,12 +232,87 @@
             <span class="status-dot green"></span>
             <span id="remote-host-info">Connected</span>
           </div>
+          
+          <div class="floating-hud-stats" id="hud-stats">
+            <span id="hud-type">P2P</span>
+            <span id="hud-ping">-- ms</span>
+            <span id="hud-res">--x--</span>
+            <span id="hud-fps">-- fps</span>
+            <span id="hud-rate">-- Mbps</span>
+          </div>
+
+          <button class="btn btn-secondary btn-sm" id="btn-transfer-file" title="Send File" style="background: transparent; border-color: rgba(255,255,255,0.2); color: white; padding: 0 8px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </button>
+          <input type="file" id="input-file-select" style="display: none;">
+
           <button class="btn btn-danger btn-sm" id="btn-client-disconnect">Disconnect</button>
         </div>
 
         <div class="remote-viewport-container" id="viewport-container">
           <video id="remote-screen-video" autoplay playsinline muted tabindex="0"></video>
           <img id="remote-screen-img" src="" alt="Waiting for remote screen stream..." tabindex="0">
+          
+          <!-- Local cursor echo overlay -->
+          <div id="local-cursor-echo" class="local-cursor-echo"></div>
+          
+          <!-- File Transfer Progress HUD overlay -->
+          <div class="file-progress-hud" id="file-progress-hud">
+            <div class="file-progress-hud-name" id="file-progress-name">filename.zip</div>
+            <div class="file-progress-hud-meta">
+              <span id="file-progress-status">Sending...</span>
+              <span id="file-progress-percent">0%</span>
+            </div>
+            <div class="file-progress-hud-bar-track">
+              <div class="file-progress-hud-bar" id="file-progress-bar"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. SETTINGS WORKSPACE -->
+      <section id="screen-settings" class="screen-view">
+        <div class="glass-panel" style="max-width: 580px;">
+          <div class="welcome-eyebrow" style="text-align: center;">Configuration</div>
+          <h2>Settings</h2>
+          <p class="panel-desc">Customize signaling server, TURN options, and capture source.</p>
+
+          <div class="settings-panel-grid">
+            <div class="form-group" style="grid-column: span 2; margin-bottom: 0;">
+              <label for="input-sig-url">Signaling Server URL</label>
+              <input type="text" id="input-sig-url" value="ws://localhost:8080" placeholder="ws://...">
+            </div>
+            <div class="form-group" style="grid-column: span 2; margin-bottom: 0;">
+              <label for="input-turn-url">TURN Server URL</label>
+              <input type="text" id="input-turn-url" value="" placeholder="turn:ip:port (optional)">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="input-turn-user">TURN Username</label>
+              <input type="text" id="input-turn-user" value="linkupuser" placeholder="User">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="input-turn-pass">TURN Password</label>
+              <input type="password" id="input-turn-pass" value="linkuppassword" placeholder="Pass">
+            </div>
+            <div class="form-group" id="settings-display-field" style="grid-column: span 2; margin-bottom: 0;">
+              <label for="select-display">Capture Display</label>
+              <select id="select-display">
+                <option value="0">Display 1 (Primary)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="settings-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--hairline-strong); padding-top: 20px; margin-top: 24px;">
+            <span class="settings-version">v0.2.0</span>
+            <div class="button-row" style="display: flex; gap: 8px; width: auto;">
+              <button class="btn btn-secondary" id="btn-settings-back">Back</button>
+              <button class="btn" id="btn-save-settings">Save Settings</button>
+            </div>
+          </div>
         </div>
       </section>
 

@@ -1,6 +1,6 @@
 [package]
 name = "linkup"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -15,10 +15,6 @@ lazy_static = "1.4"
 tokio-tungstenite = "0.29.0"
 futures-util = { version = "0.3.32", features = ["sink"] }
 ureq = { version = "3.3.0", features = ["json"] }
-
-[target.'cfg(target_os = "macos")'.dependencies]
-screencapturekit = "8.0.0"
-core-graphics = "0.23"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 dxgi-capture-rs = "1.2.2"
