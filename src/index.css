@@ -884,6 +884,10 @@ select {
 .security-panel {
   max-width: 430px;
   padding: 34px;
+  background: var(--surface-card);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--rounded-lg);
+  box-shadow: 0 16px 36px rgba(12, 10, 9, 0.15);
 }
 
 .security-panel h3,
