@@ -16,6 +16,7 @@ mod macos {
 
 #[cfg(target_os = "windows")]
 mod windows {
+    use std::sync::{Mutex, LazyLock};
     use std::sync::atomic::{AtomicU8, Ordering};
     use dxgi_capture_rs::DXGIManager;
 

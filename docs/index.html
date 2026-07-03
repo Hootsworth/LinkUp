@@ -83,7 +83,7 @@
                 <h3>macOS (Apple Silicon)</h3>
                 <p>M1 / M2 / M3 processors</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.1/LinkUp_0.2.1_aarch64.dmg"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.2/LinkUp_0.2.2_aarch64.dmg"
                 class="btn btn-ghost btn-full">Download DMG</a>
             </div>
 
@@ -92,7 +92,7 @@
                 <h3>macOS (Intel Core)</h3>
                 <p>Intel-based Mac computers</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.1/LinkUp_0.2.1_x64.dmg"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.2/LinkUp_0.2.2_x64.dmg"
                 class="btn btn-ghost btn-full">Download DMG</a>
             </div>
 
@@ -101,7 +101,7 @@
                 <h3>Windows 10 / 11</h3>
                 <p>64-bit installer setup</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.1/LinkUp_0.2.1_x64-setup.exe"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.2/LinkUp_0.2.2_x64-setup.exe"
                 class="btn btn-ghost btn-full">Download EXE</a>
             </div>
 
@@ -110,7 +110,7 @@
                 <h3>Linux (Ubuntu / Debian)</h3>
                 <p>64-bit Debian package</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.1/linkup_0.2.1_amd64.deb"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.2/linkup_0.2.2_amd64.deb"
                 class="btn btn-ghost btn-full">Download DEB</a>
             </div>
           </div>
@@ -179,22 +179,31 @@
           <p class="features-lead" style="margin-bottom: 40px;">Changelog and release notes for all LinkUp software versions.</p>
 
           <div class="release-changelog" style="display: flex; flex-direction: column; gap: 48px; text-align: left; width: 100%;">
-            <!-- v0.2.1 Release Notes -->
+            <!-- v0.2.2 Release Notes -->
             <div class="release-version" style="border-bottom: 1px solid var(--hairline-strong); padding-bottom: 32px;">
               <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
-                <h3 style="font-family: var(--font-display); font-size: 28px; font-weight: 500; color: var(--ink); margin: 0;">v0.2.1 (Maintenance Update)</h3>
+                <h3 style="font-family: var(--font-display); font-size: 28px; font-weight: 500; color: var(--ink); margin: 0;">v0.2.2 (Platform Release Fix)</h3>
                 <span style="font-family: var(--font-mono); font-size: 12px; color: var(--muted);">July 3, 2026</span>
               </div>
               <p style="font-size: 15px; color: var(--body); line-height: 1.6; margin-bottom: 18px;">
-                This release introduces critical performance optimizations, including native hardware-accelerated video streaming tracks and background thread keep-alive loops.
+                This release resolves a Windows-specific compilation issue in the DXGI frame capture module caused by missing imports (`Mutex`, `LazyLock`), enabling full cross-platform builds for Windows, macOS, and Linux.
               </p>
-              <h4 style="font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px;">Key Enhancements:</h4>
+              <h4 style="font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px;">Key Updates:</h4>
               <ul style="padding-left: 20px; color: var(--body); font-size: 14px; line-height: 1.8; display: flex; flex-direction: column; gap: 8px; margin-bottom: 0;">
-                <li><strong>Canvas WebRTC Tracks:</strong> Replaced slow DataChannel Base64 image frames with a high-performance, native VP8/H.264 video track stream.</li>
-                <li><strong>OS Background Keep-Alive:</strong> Plays a silent oscillator buffer loop to prevent operating systems from suspending the background WebView.</li>
-                <li><strong>0ms Client Cursor Echo:</strong> Renders a client cursor dot overlay in the viewport container immediately upon movement, bypassing connection delays.</li>
-                <li><strong>Dynamic Congestion Control:</strong> Periodically polls stats and adapts host capture framerates (6fps - 30fps) and JPEG qualities on-the-fly based on live network latency (ping RTT).</li>
+                <li><strong>Windows Compile Fix:</strong> Restored required synchronization primitives inside [src-tauri/src/capture.rs](file:///Users/adityadixit/Tony/Paloonies/src-tauri/src/capture.rs) to allow successful Windows build compilation.</li>
+                <li><strong>Cross-Platform Completeness:</strong> Fully compiles and packages LinkUp client installers for Windows (.exe), Linux (.deb), and macOS (.dmg).</li>
               </ul>
+            </div>
+
+            <!-- v0.2.1 Release Notes -->
+            <div class="release-version" style="border-bottom: 1px solid var(--hairline-strong); padding-bottom: 32px;">
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
+                <h3 style="font-family: var(--font-display); font-size: 24px; font-weight: 500; color: var(--muted); margin: 0;">v0.2.1</h3>
+                <span style="font-family: var(--font-mono); font-size: 12px; color: var(--muted-soft);">July 3, 2026</span>
+              </div>
+              <p style="font-size: 14px; color: var(--body); line-height: 1.6; margin-bottom: 18px;">
+                Introduces critical performance optimizations, including native hardware-accelerated video streaming tracks and background thread keep-alive loops.
+              </p>
             </div>
 
             <!-- v0.2.0 Release Notes -->
