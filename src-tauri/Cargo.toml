@@ -15,6 +15,7 @@ lazy_static = "1.4"
 tokio-tungstenite = "0.29.0"
 futures-util = { version = "0.3.32", features = ["sink"] }
 ureq = { version = "3.3.0", features = ["json"] }
+rdev = "0.5.3"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 dxgi-capture-rs = "1.2.2"

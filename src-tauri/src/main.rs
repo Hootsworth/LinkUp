@@ -20,6 +20,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 static CAPTURE_RUNNING: LazyLock<Arc<AtomicBool>> = LazyLock::new(|| Arc::new(AtomicBool::new(false)));
 static CAPTURE_SLEEP_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(33);
+static KEYBOARD_HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 static CURRENT_HOST_CODE: LazyLock<std::sync::Mutex<Option<String>>> = LazyLock::new(|| std::sync::Mutex::new(None));
 static HTTP_SHUTDOWN_TX: LazyLock<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>> = LazyLock::new(|| std::sync::Mutex::new(None));
@@ -538,6 +539,129 @@ fn submit_direct_pairing_decline() {
 }
 
 #[tauri::command]
+fn set_keyboard_hook_active(active: bool) {
+    KEYBOARD_HOOK_ACTIVE.store(active, Ordering::Relaxed);
+    println!("[RUST] Keyboard hook active status set to: {}", active);
+}
+
+fn spawn_keyboard_hook(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        if let Err(error) = rdev::listen(move |event| {
+            if KEYBOARD_HOOK_ACTIVE.load(Ordering::Relaxed) {
+                if let rdev::EventType::KeyPress(key) = event.event_type {
+                    let keycode = rdev_key_to_keycode(key);
+                    if keycode > 0 {
+                        let _ = app.emit("native-key-event", serde_json::json!({
+                            "keycode": keycode,
+                            "down": true
+                        }));
+                    }
+                } else if let rdev::EventType::KeyRelease(key) = event.event_type {
+                    let keycode = rdev_key_to_keycode(key);
+                    if keycode > 0 {
+                        let _ = app.emit("native-key-event", serde_json::json!({
+                            "keycode": keycode,
+                            "down": false
+                        }));
+                    }
+                }
+            }
+        }) {
+            eprintln!("Failed to start global keyboard hook listener: {:?}", error);
+        }
+    });
+}
+
+fn rdev_key_to_keycode(key: rdev::Key) -> u16 {
+    match key {
+        rdev::Key::KeyA => 65,
+        rdev::Key::KeyB => 66,
+        rdev::Key::KeyC => 67,
+        rdev::Key::KeyD => 68,
+        rdev::Key::KeyE => 69,
+        rdev::Key::KeyF => 70,
+        rdev::Key::KeyG => 71,
+        rdev::Key::KeyH => 72,
+        rdev::Key::KeyI => 73,
+        rdev::Key::KeyJ => 74,
+        rdev::Key::KeyK => 75,
+        rdev::Key::KeyL => 76,
+        rdev::Key::KeyM => 77,
+        rdev::Key::KeyN => 78,
+        rdev::Key::KeyO => 79,
+        rdev::Key::KeyP => 80,
+        rdev::Key::KeyQ => 81,
+        rdev::Key::KeyR => 82,
+        rdev::Key::KeyS => 83,
+        rdev::Key::KeyT => 84,
+        rdev::Key::KeyU => 85,
+        rdev::Key::KeyV => 86,
+        rdev::Key::KeyW => 87,
+        rdev::Key::KeyX => 88,
+        rdev::Key::KeyY => 89,
+        rdev::Key::KeyZ => 90,
+        rdev::Key::Num0 => 48,
+        rdev::Key::Num1 => 49,
+        rdev::Key::Num2 => 50,
+        rdev::Key::Num3 => 51,
+        rdev::Key::Num4 => 52,
+        rdev::Key::Num5 => 53,
+        rdev::Key::Num6 => 54,
+        rdev::Key::Num7 => 55,
+        rdev::Key::Num8 => 56,
+        rdev::Key::Num9 => 57,
+        rdev::Key::Return => 13,
+        rdev::Key::Escape => 27,
+        rdev::Key::Backspace => 8,
+        rdev::Key::Tab => 9,
+        rdev::Key::Space => 32,
+        rdev::Key::ControlLeft => 17,
+        rdev::Key::ControlRight => 17,
+        rdev::Key::ShiftLeft => 16,
+        rdev::Key::ShiftRight => 16,
+        rdev::Key::Alt => 18,
+        rdev::Key::AltGr => 18,
+        rdev::Key::MetaLeft => 91,
+        rdev::Key::MetaRight => 92,
+        rdev::Key::CapsLock => 20,
+        rdev::Key::F1 => 112,
+        rdev::Key::F2 => 113,
+        rdev::Key::F3 => 114,
+        rdev::Key::F4 => 115,
+        rdev::Key::F5 => 116,
+        rdev::Key::F6 => 117,
+        rdev::Key::F7 => 118,
+        rdev::Key::F8 => 119,
+        rdev::Key::F9 => 120,
+        rdev::Key::F10 => 121,
+        rdev::Key::F11 => 122,
+        rdev::Key::F12 => 123,
+        rdev::Key::LeftArrow => 37,
+        rdev::Key::UpArrow => 38,
+        rdev::Key::RightArrow => 39,
+        rdev::Key::DownArrow => 40,
+        rdev::Key::Insert => 45,
+        rdev::Key::Delete => 46,
+        rdev::Key::Home => 36,
+        rdev::Key::End => 35,
+        rdev::Key::PageUp => 33,
+        rdev::Key::PageDown => 34,
+        rdev::Key::SemiColon => 186,
+        rdev::Key::Equal => 187,
+        rdev::Key::Comma => 188,
+        rdev::Key::Minus => 189,
+        rdev::Key::Dot => 190,
+        rdev::Key::Slash => 191,
+        rdev::Key::BackQuote => 192,
+        rdev::Key::LeftBracket => 219,
+        rdev::Key::BackSlash => 220,
+        rdev::Key::RightBracket => 221,
+        rdev::Key::Quote => 222,
+        _ => 0,
+    }
+}
+
+#[tauri::command]
 fn update_capture_params(quality: u8, sleep_ms: u64) {
     capture::set_quality(quality);
     CAPTURE_SLEEP_MS.store(sleep_ms, Ordering::Relaxed);
@@ -666,6 +790,11 @@ fn main() {
     });
 
     tauri::Builder::default()
+        .setup(|app| {
+            let handle = app.handle().clone();
+            spawn_keyboard_hook(handle);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_local_ip,
             start_host,
@@ -682,7 +811,8 @@ fn main() {
             update_capture_params,
             js_log,
             submit_direct_pairing_answer,
-            submit_direct_pairing_decline
+            submit_direct_pairing_decline,
+            set_keyboard_hook_active
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

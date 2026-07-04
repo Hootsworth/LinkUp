@@ -1327,6 +1327,7 @@ window.addEventListener("keyup", (e) => handleKeyEvent(e, false));
 document.addEventListener("pointerlockchange", async () => {
   const isLocked = document.pointerLockElement === remoteScreenVideo || document.pointerLockElement === remoteScreenImg;
   if (isLocked) {
+    invoke("set_keyboard_hook_active", { active: true }).catch(console.error);
     if (navigator.keyboard && navigator.keyboard.lock) {
       try {
         await navigator.keyboard.lock(["Escape", "Tab", "AltGraph", "MetaLeft", "MetaRight"]);
@@ -1336,6 +1337,7 @@ document.addEventListener("pointerlockchange", async () => {
       }
     }
   } else {
+    invoke("set_keyboard_hook_active", { active: false }).catch(console.error);
     if (navigator.keyboard && navigator.keyboard.unlock) {
       navigator.keyboard.unlock();
       console.log("Keyboard lock released");
@@ -2148,6 +2150,18 @@ window.addEventListener("DOMContentLoaded", () => {
         invoke("submit_direct_pairing_decline").catch(console.error);
       }
     );
+  }).catch(console.error);
+
+  // Listen to native keyboard events from Rust global hook
+  listen("native-key-event", (e) => {
+    const { keycode, down } = e.payload;
+    if (viewRemoteView.classList.contains("active") && inputChannel && inputChannel.readyState === "open") {
+      inputChannel.send(JSON.stringify({
+        type: "key",
+        keycode,
+        down
+      }));
+    }
   }).catch(console.error);
 
   viewOnboarding.classList.remove("active");
