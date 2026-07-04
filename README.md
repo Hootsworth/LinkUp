@@ -53,7 +53,7 @@ sequenceDiagram
         Host->>Client: HTTP 200 OK (SDP Answer + Candidates)
     end
     
-    Client<-->Host: Establish Direct P2P WebRTC Connection
+    Client->>Host: Establish Direct P2P WebRTC Connection
 ```
 
 ---
