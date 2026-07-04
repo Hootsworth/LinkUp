@@ -123,6 +123,12 @@ let currentSlideIndex = 0;
 // Polish State
 let lastSentClipboardText = "";
 let clipboardInterval = null;
+let heartbeatInterval = null;
+let lastHeartbeatTime = 0;
+let isReconnecting = false;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+const MAX_RECONNECT_ATTEMPTS = 5;
 let savedHostCode = null;
 let savedClientId = null;
 
@@ -520,6 +526,12 @@ function setupHostPeerConnection(senderId) {
       inputChannel = channel;
       inputChannel.onmessage = (e) => {
         const inputEvent = JSON.parse(e.data);
+        if (inputEvent.type === "ping") {
+          if (inputChannel.readyState === "open") {
+            inputChannel.send(JSON.stringify({ type: "pong" }));
+          }
+          return;
+        }
         if (inputEvent.type === "move" || inputEvent.type === "click" || inputEvent.type === "key") {
           if (checkAllowInput && !checkAllowInput.checked) {
             return;
@@ -845,6 +857,7 @@ async function connectDirectClientViewer(hostIp) {
     inputChannel = peerConnection.createDataChannel("input");
     fileChannel = peerConnection.createDataChannel("file");
     setupFileChannelHandlers(fileChannel);
+    setupClientInputChannelHandlers(inputChannel);
     peerConnection.addTransceiver("video", { direction: "recvonly" });
     
     screenChannel.onopen = () => {
@@ -915,6 +928,11 @@ async function connectDirectClientViewer(hostIp) {
       remoteHostInfo.textContent = `Direct Conn: ${state} | ScreenDC: ${screenState} | InputDC: ${inputState}`;
       
       if (state === "connected") {
+        isReconnecting = false;
+        const overlay = document.getElementById("reconnection-overlay");
+        if (overlay) {
+          overlay.style.display = "none";
+        }
         showScreen(viewRemoteView);
         remoteScreenVideo.focus();
         saveRecentConnection(savedHostCode, hostIp);
@@ -922,7 +940,7 @@ async function connectDirectClientViewer(hostIp) {
         startHudDiagnostics();
         startClientClipboardSync();
       } else if (state === "disconnected" || state === "failed" || state === "closed") {
-        handleClientDisconnect("Direct WebRTC P2P connection drop");
+        triggerReconnectionFlow();
       }
     };
     
@@ -1064,6 +1082,11 @@ async function setupClientPeerConnection(targetHostCode, localClientId) {
     remoteHostInfo.textContent = `Conn: ${state} | ScreenDC: ${screenState} | InputDC: ${inputState}`;
     
     if (state === "connected") {
+      isReconnecting = false;
+      const overlay = document.getElementById("reconnection-overlay");
+      if (overlay) {
+        overlay.style.display = "none";
+      }
       showScreen(viewRemoteView);
       remoteScreenVideo.focus();
       reconnectAttempts = 0;
@@ -1080,7 +1103,7 @@ async function setupClientPeerConnection(targetHostCode, localClientId) {
       // Start Client Clipboard Sync
       startClientClipboardSync();
     } else if (state === "disconnected" || state === "failed" || state === "closed") {
-      handleClientDisconnect("WebRTC peer connection drop");
+      triggerReconnectionFlow();
     }
   };
 
@@ -1103,6 +1126,7 @@ async function setupClientPeerConnection(targetHostCode, localClientId) {
   inputChannel = peerConnection.createDataChannel("input");
   fileChannel = peerConnection.createDataChannel("file");
   setupFileChannelHandlers(fileChannel);
+  setupClientInputChannelHandlers(inputChannel);
   peerConnection.addTransceiver("video", { direction: "recvonly" });
   
   screenChannel.onopen = () => {
@@ -1282,9 +1306,12 @@ remoteScreenImg.addEventListener("contextmenu", (e) => {
 });
 
 function handleKeyEvent(e, isDown) {
-  const screenFocused = document.activeElement === remoteScreenVideo || document.activeElement === remoteScreenImg;
+  const isPointerLocked = document.pointerLockElement === remoteScreenVideo || document.pointerLockElement === remoteScreenImg;
+  const screenFocused = isPointerLocked || document.activeElement === remoteScreenVideo || document.activeElement === remoteScreenImg;
   if (screenFocused && inputChannel && inputChannel.readyState === "open") {
-    e.preventDefault();
+    if (isPointerLocked || e.key === "Tab" || e.key === "Escape" || e.key === "Alt") {
+      e.preventDefault();
+    }
     inputChannel.send(JSON.stringify({
       type: "key",
       keycode: e.keyCode,
@@ -1295,6 +1322,26 @@ function handleKeyEvent(e, isDown) {
 
 window.addEventListener("keydown", (e) => handleKeyEvent(e, true));
 window.addEventListener("keyup", (e) => handleKeyEvent(e, false));
+
+// Intercept system shortcuts via Keyboard Lock API when viewport is in pointer lock
+document.addEventListener("pointerlockchange", async () => {
+  const isLocked = document.pointerLockElement === remoteScreenVideo || document.pointerLockElement === remoteScreenImg;
+  if (isLocked) {
+    if (navigator.keyboard && navigator.keyboard.lock) {
+      try {
+        await navigator.keyboard.lock(["Escape", "Tab", "AltGraph", "MetaLeft", "MetaRight"]);
+        console.log("Keyboard lock engaged for system hotkeys");
+      } catch (err) {
+        console.warn("Failed to engage keyboard lock:", err);
+      }
+    }
+  } else {
+    if (navigator.keyboard && navigator.keyboard.unlock) {
+      navigator.keyboard.unlock();
+      console.log("Keyboard lock released");
+    }
+  }
+});
 
 // ----------------------------------------------------
 // AUTO-UPDATER
@@ -1602,6 +1649,300 @@ function setupFileChannelHandlers(channel) {
         updateFileProgressOverlay(progress);
       }
     }
+  };
+}
+
+function setupClientInputChannelHandlers(channel) {
+  channel.onopen = () => {
+    console.log("Client input channel opened. Starting heartbeat ping loop.");
+    lastHeartbeatTime = Date.now();
+    isReconnecting = false;
+    
+    // Hide overlay on open
+    const overlay = document.getElementById("reconnection-overlay");
+    if (overlay) {
+      overlay.style.display = "none";
+    }
+    
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+    }
+    
+    heartbeatInterval = setInterval(() => {
+      if (channel.readyState === "open") {
+        channel.send(JSON.stringify({ type: "ping" }));
+      }
+      
+      const timeSinceLastHeartbeat = Date.now() - lastHeartbeatTime;
+      if (timeSinceLastHeartbeat > 6000) { // 6 seconds timeout (3 missed heartbeats)
+        console.warn(`Heartbeat timeout. Last received ${timeSinceLastHeartbeat}ms ago.`);
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+        triggerReconnectionFlow();
+      }
+    }, 2000);
+  };
+  
+  channel.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === "pong") {
+        lastHeartbeatTime = Date.now();
+      } else if (data.type === "clipboard") {
+        if (checkAllowClipboard && !checkAllowClipboard.checked) return;
+        // Sync clipboard from Host to Client natively
+        invoke("write_clipboard", { text: data.text }).catch(console.error);
+        lastSentClipboardText = data.text; // Prevent echo loop
+      }
+    } catch (e) {
+      console.warn("Error parsing inputChannel message:", e);
+    }
+  };
+  
+  channel.onclose = () => {
+    console.log("Client input channel closed.");
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+  };
+}
+
+function triggerReconnectionFlow() {
+  if (isReconnecting) return;
+  isReconnecting = true;
+  reconnectAttempts = 0;
+  
+  // Show reconnection overlay
+  showReconnectionOverlay();
+  
+  attemptReconnection();
+}
+
+function showReconnectionOverlay() {
+  let overlay = document.getElementById("reconnection-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "reconnection-overlay";
+    overlay.style.position = "absolute";
+    overlay.style.top = "0";
+    overlay.style.left = "0";
+    overlay.style.width = "100%";
+    overlay.style.height = "100%";
+    overlay.style.background = "rgba(28, 28, 28, 0.85)";
+    overlay.style.backdropFilter = "blur(4px)";
+    overlay.style.zIndex = "9999";
+    overlay.style.display = "flex";
+    overlay.style.flexDirection = "column";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.color = "#fcfbf8";
+    overlay.style.fontFamily = "var(--font-display)";
+    
+    overlay.innerHTML = `
+      <div style="text-align: center; max-width: 400px; padding: 32px; background: #f7f4ed; color: #1c1c1c; border-radius: 16px; border: 1px solid #eceae4; box-shadow: rgba(0,0,0,0.15) 0px 10px 30px;">
+        <div style="font-size: 24px; font-weight: 500; margin-bottom: 12px;">Connection Interrupted</div>
+        <p id="reconnection-status-text" style="font-size: 15px; color: var(--body); line-height: 1.6; margin: 0 0 24px 0;">Attempting to restore session...</p>
+        <div style="display: flex; justify-content: center; gap: 12px;">
+          <button class="btn btn-secondary" id="btn-reconnect-cancel" style="padding: 8px 16px; font-size: 14px;">Cancel</button>
+          <button class="btn" id="btn-reconnect-now" style="padding: 8px 16px; font-size: 14px; background: #1c1c1c; color: #fcfbf8;">Retry Now</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    document.getElementById("btn-reconnect-cancel").onclick = () => {
+      cancelReconnection();
+    };
+    document.getElementById("btn-reconnect-now").onclick = () => {
+      attemptReconnection();
+    };
+  }
+  overlay.style.display = "flex";
+  document.getElementById("reconnection-status-text").textContent = "Attempting to restore session...";
+}
+
+function cancelReconnection() {
+  isReconnecting = false;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  const overlay = document.getElementById("reconnection-overlay");
+  if (overlay) {
+    overlay.style.display = "none";
+  }
+  cleanupWebRTC();
+  resetSession();
+  showScreen(viewSelection);
+}
+
+async function attemptReconnection() {
+  if (!isReconnecting) return;
+  
+  reconnectAttempts++;
+  const statusText = document.getElementById("reconnection-status-text");
+  if (statusText) {
+    statusText.textContent = `Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`;
+  }
+  
+  console.log(`Reconnection attempt ${reconnectAttempts} of ${MAX_RECONNECT_ATTEMPTS}`);
+  
+  try {
+    if (peerConnection) {
+      try {
+        peerConnection.close();
+      } catch (e) {}
+      peerConnection = null;
+    }
+    
+    const inputIp = inputClientSigUrl.value.trim();
+    const isDirect = inputIp && !inputIp.startsWith("ws://") && !inputIp.startsWith("wss://");
+    
+    if (isDirect) {
+      console.log("Reconnecting via direct LDSH...");
+      await reconnectDirectClient();
+    } else {
+      console.log("Reconnecting via WebSocket signaling server...");
+      if (!sigWs || sigWs.readyState !== WebSocket.OPEN) {
+        const sigUrl = inputSigUrl.value.trim() || "ws://localhost:8080";
+        sigWs = new WebSocket(sigUrl);
+        sigWs.onopen = () => {
+          sigWs.send(JSON.stringify({ type: 'register', id: savedClientId }));
+        };
+        sigWs.onmessage = async (event) => {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'registered') {
+            setupClientPeerConnection(savedHostCode, savedClientId);
+          } else if (msg.type === 'signal') {
+            const data = msg.data;
+            if (data.rejected) {
+              throw new Error("Connection declined by host.");
+            } else if (data.sdp) {
+              await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            } else if (data.candidate) {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            }
+          }
+        };
+        sigWs.onerror = (e) => {
+          throw new Error("Signaling connection failed.");
+        };
+      } else {
+        setupClientPeerConnection(savedHostCode, savedClientId);
+      }
+    }
+  } catch (err) {
+    console.warn(`Reconnection attempt ${reconnectAttempts} failed:`, err);
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      reconnectTimer = setTimeout(attemptReconnection, 3000);
+    } else {
+      const statusText = document.getElementById("reconnection-status-text");
+      if (statusText) {
+        statusText.textContent = "Reconnection failed. Session closed.";
+      }
+      setTimeout(cancelReconnection, 2000);
+    }
+  }
+}
+
+async function reconnectDirectClient() {
+  let targetIp = inputClientSigUrl.value.trim();
+  if (!targetIp.includes(":")) {
+    targetIp = `${targetIp}:8081`;
+  }
+  
+  peerConnection = new RTCPeerConnection(getIceConfiguration());
+  
+  screenChannel = peerConnection.createDataChannel("screen");
+  inputChannel = peerConnection.createDataChannel("input");
+  fileChannel = peerConnection.createDataChannel("file");
+  setupFileChannelHandlers(fileChannel);
+  peerConnection.addTransceiver("video", { direction: "recvonly" });
+  
+  setupClientInputChannelHandlers(inputChannel);
+  
+  const iceGatheringPromise = new Promise((resolve) => {
+    if (peerConnection.iceGatheringState === "complete") {
+      resolve();
+    } else {
+      const checkState = () => {
+        if (peerConnection.iceGatheringState === "complete") {
+          peerConnection.removeEventListener("icegatheringstatechange", checkState);
+          resolve();
+        }
+      };
+      peerConnection.addEventListener("icegatheringstatechange", checkState);
+      setTimeout(resolve, 3000);
+    }
+  });
+  
+  const offer = await peerConnection.createOffer();
+  const optimizedOffer = {
+    type: offer.type,
+    sdp: optimizeSdp(offer.sdp)
+  };
+  await peerConnection.setLocalDescription(optimizedOffer);
+  
+  await iceGatheringPromise;
+  
+  const localSdp = peerConnection.localDescription;
+  const targetUrl = `http://${targetIp}/pair`;
+  
+  const response = await fetch(targetUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      code: savedHostCode,
+      clientId: savedClientId,
+      sdp: localSdp
+    })
+  });
+  
+  if (response.status === 403) {
+    throw new Error("Connection code rejected or declined by host.");
+  } else if (!response.ok) {
+    throw new Error(`HTTP Error: ${response.status}`);
+  }
+  
+  const resData = await response.json();
+  if (!resData.sdp) {
+    throw new Error("No answer SDP returned.");
+  }
+  
+  await peerConnection.setRemoteDescription(new RTCSessionDescription({
+    type: "answer",
+    sdp: resData.sdp
+  }));
+  
+  peerConnection.onconnectionstatechange = () => {
+    const state = peerConnection.connectionState;
+    console.log("Direct client reconnection state:", state);
+    if (state === "connected") {
+      console.log("Direct client reconnected successfully!");
+      isReconnecting = false;
+      const overlay = document.getElementById("reconnection-overlay");
+      if (overlay) {
+        overlay.style.display = "none";
+      }
+      startHudDiagnostics();
+      startClientClipboardSync();
+    } else if (state === "disconnected" || state === "failed" || state === "closed") {
+      triggerReconnectionFlow();
+    }
+  };
+  
+  peerConnection.ontrack = (event) => {
+    const [stream] = event.streams;
+    if (stream) {
+      remoteScreenVideo.srcObject = stream;
+    } else {
+      remoteScreenVideo.srcObject = new MediaStream([event.track]);
+    }
+    remoteScreenVideo.play().catch(console.error);
   };
 }
 
