@@ -83,7 +83,7 @@
                 <h3>macOS (Apple Silicon)</h3>
                 <p>M1 / M2 / M3 processors</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.4/LinkUp_0.2.4_aarch64.dmg"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.3.0/LinkUp_0.3.0_aarch64.dmg"
                 class="btn btn-ghost btn-full">Download DMG</a>
             </div>
 
@@ -92,7 +92,7 @@
                 <h3>macOS (Intel Core)</h3>
                 <p>Intel-based Mac computers</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.4/LinkUp_0.2.4_x64.dmg"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.3.0/LinkUp_0.3.0_x64.dmg"
                 class="btn btn-ghost btn-full">Download DMG</a>
             </div>
 
@@ -101,7 +101,7 @@
                 <h3>Windows 10 / 11</h3>
                 <p>64-bit installer setup</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.4/LinkUp_0.2.4_x64-setup.exe"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.3.0/LinkUp_0.3.0_x64-setup.exe"
                 class="btn btn-ghost btn-full">Download EXE</a>
             </div>
 
@@ -110,7 +110,7 @@
                 <h3>Linux (Ubuntu / Debian)</h3>
                 <p>64-bit Debian package</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.2.4/linkup_0.2.4_amd64.deb"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.3.0/linkup_0.3.0_amd64.deb"
                 class="btn btn-ghost btn-full">Download DEB</a>
             </div>
           </div>
@@ -179,11 +179,30 @@
           <p class="features-lead" style="margin-bottom: 40px;">Changelog and release notes for all LinkUp software versions.</p>
 
           <div class="release-changelog" style="display: flex; flex-direction: column; gap: 48px; text-align: left; width: 100%;">
+            <!-- v0.3.0 Release Notes -->
+            <div class="release-version" style="border-bottom: 1px solid var(--hairline-strong); padding-bottom: 32px;">
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
+                <h3 style="font-family: var(--font-display); font-size: 28px; font-weight: 500; color: var(--ink); margin: 0;">v0.3.0 (Direct LDSH & Optimization Release)</h3>
+                <span style="font-family: var(--font-mono); font-size: 12px; color: var(--muted);">July 4, 2026</span>
+              </div>
+              <p style="font-size: 15px; color: var(--body); line-height: 1.6; margin-bottom: 18px;">
+                This major release introduces the **LinkUp Direct-Sync Handshake (LDSH)** protocol for decentralized, zero-WebSocket local screen sharing, along with extensive performance optimizations across Webrtc encoding, file sharing backpressure, audio support, and clipboard sync.
+              </p>
+              <h4 style="font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px;">Key Updates:</h4>
+              <ul style="padding-left: 20px; color: var(--body); font-size: 14px; line-height: 1.8; display: flex; flex-direction: column; gap: 8px; margin-bottom: 0;">
+                <li><strong>Direct LDSH Protocol:</strong> Direct local network connection pairing without centralized signaling servers, utilizing local HTTP server threads and Vanilla ICE candidate bundling.</li>
+                <li><strong>Dynamic Encoding Adaptation:</strong> Real-time frame resolution, framerate, and bandwidth adjustment matching connection ping.</li>
+                <li><strong>Binary Frame Streaming:</strong> Bypassed Base64 serialization overhead in the capture loop by piping raw binary frames directly into Blob URLs.</li>
+                <li><strong>File Transfer Backpressure:</strong> Replaced timer loops with WebRTC data channel event-driven flow control for 64KB data chunks.</li>
+                <li><strong>Native Clipboard & Audio:</strong> Added Rust-level clipboard change detection threads and high-fidelity loopback system audio streams.</li>
+              </ul>
+            </div>
+
             <!-- v0.2.4 Release Notes -->
             <div class="release-version" style="border-bottom: 1px solid var(--hairline-strong); padding-bottom: 32px;">
               <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
-                <h3 style="font-family: var(--font-display); font-size: 28px; font-weight: 500; color: var(--ink); margin: 0;">v0.2.4 (Squircle App Icon Release)</h3>
-                <span style="font-family: var(--font-mono); font-size: 12px; color: var(--muted);">July 3, 2026</span>
+                <h3 style="font-family: var(--font-display); font-size: 24px; font-weight: 500; color: var(--muted); margin: 0;">v0.2.4 (Squircle App Icon Release)</h3>
+                <span style="font-family: var(--font-mono); font-size: 12px; color: var(--muted-soft);">July 3, 2026</span>
               </div>
               <p style="font-size: 15px; color: var(--body); line-height: 1.6; margin-bottom: 18px;">
                 This release improves the desktop application icons, applying premium rounded squircle transparent corner masking for Windows, Linux, and macOS platforms.

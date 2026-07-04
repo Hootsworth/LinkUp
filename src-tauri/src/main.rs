@@ -14,9 +14,14 @@ use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
 use futures_util::{StreamExt, SinkExt};
 use serde_json::Value;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 static CAPTURE_RUNNING: LazyLock<Arc<AtomicBool>> = LazyLock::new(|| Arc::new(AtomicBool::new(false)));
 static CAPTURE_SLEEP_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(33);
+
+static CURRENT_HOST_CODE: LazyLock<std::sync::Mutex<Option<String>>> = LazyLock::new(|| std::sync::Mutex::new(None));
+static HTTP_SHUTDOWN_TX: LazyLock<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>> = LazyLock::new(|| std::sync::Mutex::new(None));
+static DIRECT_PAIR_RESPONSE_TX: LazyLock<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<String>>>> = LazyLock::new(|| std::sync::Mutex::new(None));
 
 // ----------------------------------------------------
 // NATIVE SIGNALING SERVER (PORT 8080)
@@ -118,6 +123,119 @@ async fn start_signaling_server() {
                 peers.lock().await.remove(&id);
             }
         });
+    }
+}
+
+async fn handle_direct_http_connection(mut stream: tokio::net::TcpStream, app: tauri::AppHandle) {
+    let mut buffer = [0; 8192];
+    let mut bytes_read = 0;
+    
+    // Read request bytes
+    while bytes_read < buffer.len() {
+        match stream.read(&mut buffer[bytes_read..]).await {
+            Ok(0) => break,
+            Ok(n) => {
+                bytes_read += n;
+                // Simple check for end of HTTP headers
+                if buffer[..bytes_read].windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            Err(_) => return,
+        }
+    }
+    
+    let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
+    
+    // Simple HTTP parser
+    if request_str.starts_with("OPTIONS /pair") {
+        let response = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nContent-Length: 0\r\n\r\n";
+        let _ = stream.write_all(response.as_bytes()).await;
+        return;
+    }
+    
+    if !request_str.starts_with("POST /pair") {
+        let response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+        let _ = stream.write_all(response.as_bytes()).await;
+        return;
+    }
+    
+    // Extract JSON body
+    let parts: Vec<&str> = request_str.split("\r\n\r\n").collect();
+    if parts.len() < 2 {
+        let response = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
+        let _ = stream.write_all(response.as_bytes()).await;
+        return;
+    }
+    
+    let body = parts[1];
+    let val: serde_json::Value = match serde_json::from_str(body) {
+        Ok(v) => v,
+        Err(_) => {
+            let response = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
+            let _ = stream.write_all(response.as_bytes()).await;
+            return;
+        }
+    };
+    
+    let client_code = val.get("code").and_then(|c| c.as_str()).unwrap_or("");
+    let client_id = val.get("clientId").and_then(|c| c.as_str()).unwrap_or("");
+    let client_sdp = val.get("sdp").cloned().unwrap_or(serde_json::Value::Null);
+    
+    // Get host code from memory
+    let host_code = match CURRENT_HOST_CODE.lock() {
+        Ok(lock) => lock.clone().unwrap_or_default(),
+        Err(_) => String::new(),
+    };
+    
+    if client_code.is_empty() || client_code != host_code {
+        let response = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
+        let _ = stream.write_all(response.as_bytes()).await;
+        return;
+    }
+    
+    // Code matches! Emit a Tauri event to the host WebView to trigger the security dialog
+    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+    if let Ok(mut lock) = DIRECT_PAIR_RESPONSE_TX.lock() {
+        *lock = Some(tx);
+    }
+    
+    let event_payload = serde_json::json!({
+        "clientId": client_id,
+        "sdp": client_sdp
+    });
+    
+    if let Err(_) = app.emit("direct-pairing-request", &event_payload) {
+        let response = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
+        let _ = stream.write_all(response.as_bytes()).await;
+        return;
+    }
+    
+    // Wait for the host JS to accept or decline the request
+    tokio::select! {
+        res_ok = rx => {
+            match res_ok {
+                Ok(host_answer) => {
+                    let body_response = serde_json::json!({
+                        "sdp": host_answer
+                    }).to_string();
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: Content-Type\r\nContent-Length: {}\r\n\r\n{}",
+                        body_response.len(),
+                        body_response
+                    );
+                    let _ = stream.write_all(response.as_bytes()).await;
+                }
+                Err(_) => {
+                    let response = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
+                    let _ = stream.write_all(response.as_bytes()).await;
+                }
+            }
+        }
+        _ = tokio::time::sleep(tokio::time::Duration::from_secs(30)) => {
+            let response = "HTTP/1.1 408 Request Timeout\r\nContent-Length: 0\r\n\r\n";
+            let _ = stream.write_all(response.as_bytes()).await;
+        }
     }
 }
 
@@ -289,19 +407,31 @@ fn get_local_ip() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn start_host(app: tauri::AppHandle) -> Result<(), String> {
-    capture::start_capture()?;
+async fn start_host(app: tauri::AppHandle, code: String) -> Result<(), String> {
+    let capture_init = capture::start_capture();
+    if let Err(ref e) = capture_init {
+        println!("[RUST WARN] Screen capture initialization skipped/failed: {}", e);
+    }
+    
+    // Store current host session pairing code
+    if let Ok(mut lock) = CURRENT_HOST_CODE.lock() {
+        *lock = Some(code.clone());
+    }
     
     let running = CAPTURE_RUNNING.clone();
     running.store(true, Ordering::Relaxed);
     
+    let running_capture = running.clone();
+    let app_capture = app.clone();
+    let has_capture = capture_init.is_ok();
     tauri::async_runtime::spawn(async move {
-        use base64::{Engine as _, engine::general_purpose};
-        while running.load(Ordering::Relaxed) {
+        if !has_capture {
+            return;
+        }
+        while running_capture.load(Ordering::Relaxed) {
             if let Some(frame) = capture::get_latest_frame() {
-                let b64 = general_purpose::STANDARD.encode(&frame);
-                match app.emit("local-frame", &b64) {
-                    Ok(_) => println!("[RUST DEBUG] app.emit local-frame succeeded (len: {})", b64.len()),
+                match app_capture.emit("local-frame", &frame) {
+                    Ok(_) => println!("[RUST DEBUG] app.emit local-frame succeeded (len: {})", frame.len()),
                     Err(e) => println!("[RUST ERROR] app.emit local-frame failed: {:?}", e),
                 }
             }
@@ -310,6 +440,64 @@ async fn start_host(app: tauri::AppHandle) -> Result<(), String> {
         }
         capture::stop_capture();
     });
+
+    let running_clipboard = running.clone();
+    let app_clip = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut last_clipboard = match read_clipboard() {
+            Ok(text) => text,
+            Err(_) => String::new(),
+        };
+        
+        while running_clipboard.load(Ordering::Relaxed) {
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            if let Ok(current_text) = read_clipboard() {
+                if !current_text.is_empty() && current_text != last_clipboard {
+                    last_clipboard = current_text.clone();
+                    if let Err(e) = app_clip.emit("host-clipboard-changed", &last_clipboard) {
+                        println!("[RUST ERROR] failed to emit host-clipboard-changed: {:?}", e);
+                    }
+                }
+            }
+        }
+    });
+
+    // Spawn direct local HTTP server for single-round-trip LDSH pairing
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    if let Ok(mut lock) = HTTP_SHUTDOWN_TX.lock() {
+        *lock = Some(tx);
+    }
+    
+    let app_http = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let listener = match TcpListener::bind("0.0.0.0:8081").await {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("Failed to bind direct HTTP server: {}", e);
+                return;
+            }
+        };
+        println!("Direct HTTP Signaling Server listening on: 0.0.0.0:8081");
+        
+        let mut shutdown_signal = rx;
+        loop {
+            tokio::select! {
+                accept_res = listener.accept() => {
+                    if let Ok((stream, _)) = accept_res {
+                        let app_clone = app_http.clone();
+                        tokio::spawn(async move {
+                            handle_direct_http_connection(stream, app_clone).await;
+                        });
+                    }
+                }
+                _ = &mut shutdown_signal => {
+                    println!("Direct HTTP server shutting down");
+                    break;
+                }
+            }
+        }
+    });
+
     Ok(())
 }
 
@@ -317,6 +505,34 @@ async fn start_host(app: tauri::AppHandle) -> Result<(), String> {
 fn stop_host() {
     CAPTURE_RUNNING.store(false, Ordering::Relaxed);
     capture::stop_capture();
+    
+    // Clear pairing code
+    if let Ok(mut lock) = CURRENT_HOST_CODE.lock() {
+        *lock = None;
+    }
+    
+    // Shut down direct HTTP signaling server
+    if let Ok(mut lock) = HTTP_SHUTDOWN_TX.lock() {
+        if let Some(tx) = lock.take() {
+            let _ = tx.send(());
+        }
+    }
+}
+
+#[tauri::command]
+fn submit_direct_pairing_answer(answer: String) {
+    if let Ok(mut lock) = DIRECT_PAIR_RESPONSE_TX.lock() {
+        if let Some(tx) = lock.take() {
+            let _ = tx.send(answer);
+        }
+    }
+}
+
+#[tauri::command]
+fn submit_direct_pairing_decline() {
+    if let Ok(mut lock) = DIRECT_PAIR_RESPONSE_TX.lock() {
+        let _ = lock.take(); // drops sender which signals HTTP 403 back to client
+    }
 }
 
 #[tauri::command]
@@ -462,7 +678,9 @@ fn main() {
             check_for_update,
             apply_update,
             update_capture_params,
-            js_log
+            js_log,
+            submit_direct_pairing_answer,
+            submit_direct_pairing_decline
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

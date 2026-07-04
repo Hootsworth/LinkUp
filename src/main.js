@@ -115,6 +115,7 @@ let screenChannel = null;
 let inputChannel = null;
 let fileChannel = null; // Dedicated binary file transfer datachannel
 let localTauriFrameUnlisten = null;
+let localTauriClipboardUnlisten = null;
 let localScreenStream = null;
 let activeRole = null; // 'host' or 'client'
 let currentSlideIndex = 0;
@@ -132,6 +133,8 @@ let hudInterval = null;
 let prevBytesReceived = 0;
 let prevFramesDecoded = 0;
 let prevTimestamp = 0;
+let virtualMouseX = 0.5;
+let virtualMouseY = 0.5;
 const MAX_SCREEN_BUFFER_BYTES = 4 * 1024 * 1024;
 
 // ICE candidate buffer — holds candidates that arrive at the host before
@@ -297,6 +300,11 @@ function cleanupWebRTC() {
     localTauriFrameUnlisten = null;
   }
 
+  if (localTauriClipboardUnlisten) {
+    localTauriClipboardUnlisten();
+    localTauriClipboardUnlisten = null;
+  }
+  
   if (localScreenStream) {
     localScreenStream.getTracks().forEach(track => track.stop());
     localScreenStream = null;
@@ -357,6 +365,9 @@ btnModeHost.addEventListener("click", () => {
   const code = generateSessionCode();
   const sigUrl = inputSigUrl.value.trim() || "ws://localhost:8080";
   
+  // Initialize Rust backend hosting (HTTP direct server, capture, clipboard)
+  invoke("start_host", { code }).catch(console.error);
+  
   showScreen(viewHosting);
   hostStatusText.textContent = "Connecting to signaling server...";
   hostStatusDot.className = "status-dot pulsing";
@@ -395,56 +406,24 @@ btnModeHost.addEventListener("click", () => {
         const data = msg.data;
         
         if (data.sdp && data.sdp.type === "offer") {
-          // SECURITY HANDSHAKE: Prompt user to accept/decline connection request
-          securityRequestMessage.textContent = `Device ${senderId} wants to view and control your desktop. Do you accept this request?`;
-          securityDialog.classList.add("open");
-          
-          btnSecurityAccept.onclick = async () => {
-            securityDialog.classList.remove("open");
-            try {
-              setupHostPeerConnection(senderId);
-              await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-              const usingVideoTrack = await startHostScreenShare(senderId);
-              
-              // Prevent background webview throttling on host
-              keepWebviewAlive();
-              
-              const answer = await peerConnection.createAnswer();
-              await peerConnection.setLocalDescription(answer);
+          handleOfferSignal(
+            senderId,
+            data.sdp,
+            (answer, usingVideoTrack) => {
               sigWs.send(JSON.stringify({
                 type: 'signal',
                 target: senderId,
                 data: { sdp: answer, mode: usingVideoTrack ? "video" : "jpeg-fallback" }
               }));
-              // Flush buffered ICE candidates that arrived before acceptance.
-              console.log(`Flushing ${iceCandidateBuffer.length} buffered ICE candidates`);
-              for (const candidate of iceCandidateBuffer) {
-                try {
-                  await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                } catch (e) {
-                  console.warn("Failed to add buffered ICE candidate:", e);
-                }
-              }
-              iceCandidateBuffer = [];
-            } catch (acceptErr) {
-              console.error("Failed to accept remote viewer:", acceptErr);
-              hostStatusText.textContent = `Screen share failed: ${acceptErr}`;
-              hostStatusDot.className = "status-dot red";
-              cleanupWebRTC();
+            },
+            () => {
+              sigWs.send(JSON.stringify({
+                type: 'signal',
+                target: senderId,
+                data: { rejected: true }
+              }));
             }
-          };
-          
-          btnSecurityDecline.onclick = () => {
-            securityDialog.classList.remove("open");
-            iceCandidateBuffer = []; // discard buffered candidates on decline
-            sigWs.send(JSON.stringify({
-              type: 'signal',
-              target: senderId,
-              data: { rejected: true }
-            }));
-            cleanupWebRTC();
-            resetSession();
-          };
+          );
         } else if (data.candidate) {
           if (peerConnection && peerConnection.remoteDescription) {
             // Peer connection is ready — apply immediately.
@@ -516,8 +495,8 @@ function setupHostPeerConnection(senderId) {
     
     if (state === "connected") {
       hostStatusDot.className = "status-dot green";
-      // Start Host Clipboard Poller
-      startHostClipboardPoller();
+      // Start Host Clipboard Monitor
+      startHostClipboardMonitor();
     } else if (state === "disconnected" || state === "failed" || state === "closed") {
       resetSession();
     }
@@ -572,6 +551,49 @@ function setupHostPeerConnection(senderId) {
             quality: inputEvent.quality,
             sleepMs: inputEvent.sleepMs
           }).catch(console.error);
+
+          // Dynamic WebRTC video encoding adaptation
+          if (peerConnection) {
+            try {
+              const senders = peerConnection.getSenders();
+              const videoSender = senders.find(s => s.track && s.track.kind === "video");
+              if (videoSender) {
+                const params = videoSender.getParameters();
+                if (!params.encodings || params.encodings.length === 0) {
+                  params.encodings = [{}];
+                }
+                let maxBitrate = 8_000_000;
+                let scaleDown = 1.0;
+                let maxFps = 30;
+
+                if (inputEvent.quality <= 25) {
+                  maxBitrate = 500_000;
+                  scaleDown = 2.0;
+                  maxFps = 10;
+                } else if (inputEvent.quality <= 40) {
+                  maxBitrate = 1_200_000;
+                  scaleDown = 1.5;
+                  maxFps = 15;
+                } else if (inputEvent.quality <= 60) {
+                  maxBitrate = 3_000_000;
+                  scaleDown = 1.0;
+                  maxFps = 24;
+                }
+
+                params.encodings[0].maxBitrate = maxBitrate;
+                params.encodings[0].scaleResolutionDownBy = scaleDown;
+                params.encodings[0].maxFramerate = maxFps;
+                
+                videoSender.setParameters(params).then(() => {
+                  console.log(`Adapted WebRTC video track encoding: maxBitrate=${maxBitrate}, scaleDown=${scaleDown}, maxFps=${maxFps}`);
+                }).catch(err => {
+                  console.warn("Failed to set video track parameters:", err);
+                });
+              }
+            } catch (err) {
+              console.warn("Failed to adapt WebRTC video sender params:", err);
+            }
+          }
         }
       };
     } else if (channel.label === "file") {
@@ -593,7 +615,11 @@ async function startHostScreenShare(senderId) {
         height: { ideal: 1080 },
         frameRate: { ideal: 30, max: 60 }
       },
-      audio: false
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
     });
 
     const [videoTrack] = localScreenStream.getVideoTracks();
@@ -608,8 +634,15 @@ async function startHostScreenShare(senderId) {
       }
     };
 
-    const sender = peerConnection.addTrack(videoTrack, localScreenStream);
-    await tuneVideoSender(sender);
+    // Add all captured tracks (video and audio) to peer connection
+    localScreenStream.getTracks().forEach(track => {
+      peerConnection.addTrack(track, localScreenStream);
+    });
+
+    const sender = peerConnection.getSenders().find(s => s.track === videoTrack);
+    if (sender) {
+      await tuneVideoSender(sender);
+    }
     hostStatusText.textContent = "Streaming screen as WebRTC video...";
     return true;
   } catch (videoErr) {
@@ -635,12 +668,6 @@ async function tuneVideoSender(sender) {
 }
 
 async function startJpegFallbackStream() {
-  try {
-    await invoke("start_host");
-  } catch (captureErr) {
-    throw new Error(`${captureErr}. Grant Screen Recording permission in System Settings.`);
-  }
-
   // Create canvas for WebRTC native video track streaming
   const canvas = document.createElement("canvas");
   canvas.width = 1280;
@@ -657,37 +684,43 @@ async function startJpegFallbackStream() {
 
   let framesSent = 0;
   localTauriFrameUnlisten = await listen("local-frame", (e) => {
+    const blob = new Blob([e.payload], { type: 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    
     const img = new Image();
     img.onload = () => {
       canvas.width = img.width;
       canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
       framesSent++;
       if (framesSent % 30 === 0) {
         hostStatusText.textContent = `WebRTC Video stream: ${framesSent} frames processed`;
       }
     };
-    img.src = "data:image/jpeg;base64," + e.payload;
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
   });
 }
 
-function startHostClipboardPoller() {
-  if (clipboardInterval) clearInterval(clipboardInterval);
-  clipboardInterval = setInterval(async () => {
+async function startHostClipboardMonitor() {
+  if (localTauriClipboardUnlisten) {
+    localTauriClipboardUnlisten();
+    localTauriClipboardUnlisten = null;
+  }
+  localTauriClipboardUnlisten = await listen("host-clipboard-changed", (e) => {
     if (checkAllowClipboard && !checkAllowClipboard.checked) return;
-    try {
-      const text = await invoke("read_clipboard");
-      if (text && text !== lastSentClipboardText) {
-        lastSentClipboardText = text;
-        if (inputChannel && inputChannel.readyState === "open") {
-          inputChannel.send(JSON.stringify({ type: "clipboard", text }));
-          console.log("Synced host clipboard update to remote client");
-        }
+    const text = e.payload;
+    if (text && text !== lastSentClipboardText) {
+      lastSentClipboardText = text;
+      if (inputChannel && inputChannel.readyState === "open") {
+        inputChannel.send(JSON.stringify({ type: "clipboard", text }));
+        console.log("Synced native host clipboard update to remote client");
       }
-    } catch (e) {
-      console.error("Clipboard polling error:", e);
     }
-  }, 1500);
+  });
 }
 
 btnStopHosting.addEventListener("click", () => {
@@ -720,18 +753,15 @@ btnClientConnect.addEventListener("click", () => {
 
 function connectClientViewer() {
   const inputIp = inputClientSigUrl.value.trim();
-  let sigUrl = inputSigUrl.value.trim() || "ws://localhost:8080";
   
+  if (inputIp && !inputIp.startsWith("ws://") && !inputIp.startsWith("wss://")) {
+    connectDirectClientViewer(inputIp);
+    return;
+  }
+  
+  let sigUrl = inputSigUrl.value.trim() || "ws://localhost:8080";
   if (inputIp) {
-    if (!inputIp.startsWith("ws://") && !inputIp.startsWith("wss://")) {
-      if (inputIp.includes(":")) {
-        sigUrl = `ws://${inputIp}`;
-      } else {
-        sigUrl = `ws://${inputIp}:8080`;
-      }
-    } else {
-      sigUrl = inputIp;
-    }
+    sigUrl = inputIp;
   }
 
   clientError.style.display = "none";
@@ -797,6 +827,129 @@ function connectClientViewer() {
   }
 }
 
+async function connectDirectClientViewer(hostIp) {
+  clientError.style.display = "none";
+  btnClientConnect.textContent = "Direct P2P pairing...";
+  btnClientConnect.disabled = true;
+  activeRole = "client";
+  
+  let targetIp = hostIp;
+  if (!targetIp.includes(":")) {
+    targetIp = `${targetIp}:8081`;
+  }
+  
+  try {
+    peerConnection = new RTCPeerConnection(getIceConfiguration());
+    
+    screenChannel = peerConnection.createDataChannel("screen");
+    inputChannel = peerConnection.createDataChannel("input");
+    fileChannel = peerConnection.createDataChannel("file");
+    setupFileChannelHandlers(fileChannel);
+    peerConnection.addTransceiver("video", { direction: "recvonly" });
+    
+    screenChannel.onopen = () => {
+      console.log("Direct P2P Screen data channel opened");
+    };
+    
+    const iceGatheringPromise = new Promise((resolve) => {
+      if (peerConnection.iceGatheringState === "complete") {
+        resolve();
+      } else {
+        const checkState = () => {
+          if (peerConnection.iceGatheringState === "complete") {
+            peerConnection.removeEventListener("icegatheringstatechange", checkState);
+            resolve();
+          }
+        };
+        peerConnection.addEventListener("icegatheringstatechange", checkState);
+        setTimeout(resolve, 3000); // 3 seconds timeout safeguard
+      }
+    });
+    
+    const offer = await peerConnection.createOffer();
+    const optimizedOffer = {
+      type: offer.type,
+      sdp: optimizeSdp(offer.sdp)
+    };
+    await peerConnection.setLocalDescription(optimizedOffer);
+    
+    await iceGatheringPromise;
+    
+    const localSdp = peerConnection.localDescription;
+    const targetUrl = `http://${targetIp}/pair`;
+    console.log(`Sending direct pairing request to: ${targetUrl}`);
+    
+    const response = await fetch(targetUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        code: savedHostCode,
+        clientId: savedClientId,
+        sdp: localSdp
+      })
+    });
+    
+    if (response.status === 403) {
+      throw new Error("Connection pairing code rejected or declined by host.");
+    } else if (!response.ok) {
+      throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+    }
+    
+    const resData = await response.json();
+    if (!resData.sdp) {
+      throw new Error("No answer SDP returned from host.");
+    }
+    
+    await peerConnection.setRemoteDescription(new RTCSessionDescription({
+      type: "answer",
+      sdp: resData.sdp
+    }));
+    
+    peerConnection.onconnectionstatechange = () => {
+      const state = peerConnection.connectionState;
+      console.log("Direct client connection state:", state);
+      const screenState = screenChannel ? screenChannel.readyState : "null";
+      const inputState = inputChannel ? inputChannel.readyState : "null";
+      remoteHostInfo.textContent = `Direct Conn: ${state} | ScreenDC: ${screenState} | InputDC: ${inputState}`;
+      
+      if (state === "connected") {
+        showScreen(viewRemoteView);
+        remoteScreenVideo.focus();
+        saveRecentConnection(savedHostCode, hostIp);
+        keepWebviewAlive();
+        startHudDiagnostics();
+        startClientClipboardSync();
+      } else if (state === "disconnected" || state === "failed" || state === "closed") {
+        handleClientDisconnect("Direct WebRTC P2P connection drop");
+      }
+    };
+    
+    peerConnection.ontrack = (event) => {
+      const [stream] = event.streams;
+      if (stream) {
+        remoteScreenVideo.srcObject = stream;
+      } else {
+        remoteScreenVideo.srcObject = new MediaStream([event.track]);
+      }
+      remoteScreenVideo.muted = false; // Enable audio track playback
+      remoteScreenVideo.classList.remove("fallback-hidden");
+      remoteScreenImg.classList.remove("fallback-active");
+      remoteHostInfo.textContent = `Viewing Host: ${savedHostCode.slice(0, 3)} ${savedHostCode.slice(3)} | Direct P2P video stream`;
+      remoteScreenVideo.play().catch((e) => console.warn("Unable to auto-play remote video:", e));
+    };
+    
+  } catch (err) {
+    console.error("Direct connection error:", err);
+    clientError.textContent = `Direct connection failed: ${err.message}`;
+    clientError.style.display = "block";
+    btnClientConnect.textContent = "Connect";
+    btnClientConnect.disabled = false;
+    cleanupWebRTC();
+  }
+}
+
 function handleClientDisconnect(errMsg) {
   console.log("Client disconnected:", errMsg);
   // Show the error and let the user retry manually.
@@ -809,6 +962,85 @@ function handleClientDisconnect(errMsg) {
     btnClientConnect.disabled = false;
     resetSession();
   }
+}
+
+function optimizeSdp(sdp) {
+  let lines = sdp.split('\r\n');
+  const videoLineIndex = lines.findIndex(line => line.startsWith('m=video'));
+  if (videoLineIndex !== -1) {
+    const parts = lines[videoLineIndex].split(' ');
+    const proto = parts[2];
+    const payloads = parts.slice(3);
+    
+    let h264Payloads = [];
+    let otherPayloads = [];
+    
+    payloads.forEach(payload => {
+      const rtpmapLine = lines.find(line => line.startsWith(`a=rtpmap:${payload} H264/`));
+      if (rtpmapLine) {
+        h264Payloads.push(payload);
+      } else {
+        otherPayloads.push(payload);
+      }
+    });
+    
+    if (h264Payloads.length > 0) {
+      const newPayloadOrder = [...h264Payloads, ...otherPayloads];
+      lines[videoLineIndex] = `m=video ${parts[1]} ${proto} ${newPayloadOrder.join(' ')}`;
+      console.log("Low-latency SDP: Prioritized H.264 codec payload types:", h264Payloads);
+    }
+  }
+  return lines.join('\r\n');
+}
+
+async function handleOfferSignal(senderId, clientSdp, onAcceptAnswer, onDecline) {
+  securityRequestMessage.textContent = `Device ${senderId} wants to view and control your desktop. Do you accept this request?`;
+  securityDialog.classList.add("open");
+  
+  btnSecurityAccept.onclick = async () => {
+    securityDialog.classList.remove("open");
+    try {
+      setupHostPeerConnection(senderId);
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(clientSdp));
+      const usingVideoTrack = await startHostScreenShare(senderId);
+      
+      // Prevent background webview throttling on host
+      keepWebviewAlive();
+      
+      const answer = await peerConnection.createAnswer();
+      const optimizedAnswer = {
+        type: answer.type,
+        sdp: optimizeSdp(answer.sdp)
+      };
+      await peerConnection.setLocalDescription(optimizedAnswer);
+      
+      onAcceptAnswer(optimizedAnswer, usingVideoTrack);
+      
+      // Flush buffered ICE candidates that arrived before acceptance.
+      console.log(`Flushing ${iceCandidateBuffer.length} buffered ICE candidates`);
+      for (const candidate of iceCandidateBuffer) {
+        try {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn("Failed to add buffered ICE candidate:", e);
+        }
+      }
+      iceCandidateBuffer = [];
+    } catch (acceptErr) {
+      console.error("Failed to accept remote viewer:", acceptErr);
+      hostStatusText.textContent = `Screen share failed: ${acceptErr}`;
+      hostStatusDot.className = "status-dot red";
+      cleanupWebRTC();
+    }
+  };
+  
+  btnSecurityDecline.onclick = () => {
+    securityDialog.classList.remove("open");
+    iceCandidateBuffer = []; // discard buffered candidates on decline
+    onDecline();
+    cleanupWebRTC();
+    resetSession();
+  };
 }
 
 async function setupClientPeerConnection(targetHostCode, localClientId) {
@@ -859,6 +1091,7 @@ async function setupClientPeerConnection(targetHostCode, localClientId) {
     } else {
       remoteScreenVideo.srcObject = new MediaStream([event.track]);
     }
+    remoteScreenVideo.muted = false; // Enable audio track playback
     remoteScreenVideo.classList.remove("fallback-hidden");
     remoteScreenImg.classList.remove("fallback-active");
     remoteHostInfo.textContent = `Viewing Host: ${targetHostCode.slice(0, 3)} ${targetHostCode.slice(3)} | HD video stream`;
@@ -892,12 +1125,16 @@ async function setupClientPeerConnection(targetHostCode, localClientId) {
   
   // Generate Offer
   const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
+  const optimizedOffer = {
+    type: offer.type,
+    sdp: optimizeSdp(offer.sdp)
+  };
+  await peerConnection.setLocalDescription(optimizedOffer);
   
   sigWs.send(JSON.stringify({
     type: 'signal',
     target: targetHostCode,
-    data: { sdp: offer }
+    data: { sdp: optimizedOffer }
   }));
 }
 
@@ -941,15 +1178,45 @@ function getNormalizedCoordinates(e) {
 
 function handleMouseMove(e) {
   if (viewRemoteView.classList.contains("active") && inputChannel && inputChannel.readyState === "open") {
-    const { x, y } = getNormalizedCoordinates(e);
+    let x, y;
+    const target = remoteScreenImg.classList.contains("fallback-active") ? remoteScreenImg : remoteScreenVideo;
+    
+    if (document.pointerLockElement === target) {
+      const rect = target.getBoundingClientRect();
+      virtualMouseX += e.movementX / rect.width;
+      virtualMouseY += e.movementY / rect.height;
+      
+      virtualMouseX = Math.max(0.0, Math.min(1.0, virtualMouseX));
+      virtualMouseY = Math.max(0.0, Math.min(1.0, virtualMouseY));
+      
+      x = virtualMouseX;
+      y = virtualMouseY;
+    } else {
+      const coords = getNormalizedCoordinates(e);
+      x = coords.x;
+      y = coords.y;
+      
+      virtualMouseX = x;
+      virtualMouseY = y;
+    }
+    
     inputChannel.send(JSON.stringify({ type: "move", x, y }));
     
     // Position local cursor echo overlay inside viewport
     const container = document.getElementById("viewport-container");
     if (container && localCursorEcho) {
       const containerRect = container.getBoundingClientRect();
-      const localX = e.clientX - containerRect.left;
-      const localY = e.clientY - containerRect.top;
+      let localX, localY;
+      
+      if (document.pointerLockElement === target) {
+        const rect = target.getBoundingClientRect();
+        localX = rect.left - containerRect.left + (virtualMouseX * rect.width);
+        localY = rect.top - containerRect.top + (virtualMouseY * rect.height);
+      } else {
+        localX = e.clientX - containerRect.left;
+        localY = e.clientY - containerRect.top;
+      }
+      
       localCursorEcho.style.left = `${localX}px`;
       localCursorEcho.style.top = `${localY}px`;
       localCursorEcho.style.display = "block";
@@ -957,14 +1224,26 @@ function handleMouseMove(e) {
   }
 }
 
+function requestPointerLockOnViewport() {
+  const target = remoteScreenImg.classList.contains("fallback-active") ? remoteScreenImg : remoteScreenVideo;
+  if (document.pointerLockElement !== target) {
+    target.requestPointerLock().catch(err => {
+      console.warn("Pointer lock request failed:", err);
+    });
+  }
+}
+
+remoteScreenVideo.addEventListener("click", requestPointerLockOnViewport);
+remoteScreenImg.addEventListener("click", requestPointerLockOnViewport);
+
 remoteScreenVideo.addEventListener("mousemove", handleMouseMove);
 remoteScreenImg.addEventListener("mousemove", handleMouseMove);
 
 remoteScreenVideo.addEventListener("mouseleave", () => {
-  if (localCursorEcho) localCursorEcho.style.display = "none";
+  if (document.pointerLockElement === null && localCursorEcho) localCursorEcho.style.display = "none";
 });
 remoteScreenImg.addEventListener("mouseleave", () => {
-  if (localCursorEcho) localCursorEcho.style.display = "none";
+  if (document.pointerLockElement === null && localCursorEcho) localCursorEcho.style.display = "none";
 });
 
 function handleMouseClick(e, isDown) {
@@ -1341,12 +1620,19 @@ function triggerFileSend(file) {
     size: file.size
   }));
   
-  const CHUNK_SIZE = 16384;
+  const CHUNK_SIZE = 65536; // 64KB chunks
   let offset = 0;
   const fileReader = new FileReader();
   
+  // Set threshold to 256KB for backpressure buffering
+  fileChannel.bufferedAmountLowThreshold = 262144;
+  
+  fileChannel.onbufferedamountlow = () => {
+    readNext();
+  };
+  
   const readSlice = (o) => {
-    const slice = file.slice(offset, o + CHUNK_SIZE);
+    const slice = file.slice(o, o + CHUNK_SIZE);
     fileReader.readAsArrayBuffer(slice);
   };
   
@@ -1358,16 +1644,12 @@ function triggerFileSend(file) {
     const progress = Math.round((offset / file.size) * 100);
     updateFileProgressOverlay(progress);
     
-    if (fileChannel.bufferedAmount > 1048576) { // wait if buffer > 1MB
-      setTimeout(() => readNext(), 40);
-    } else {
-      readNext();
-    }
-  };
-  
-  const readNext = () => {
     if (offset < file.size) {
-      readSlice(offset);
+      if (fileChannel.bufferedAmount > fileChannel.bufferedAmountLowThreshold) {
+        // Pause reading and wait for onbufferedamountlow event to fire
+        return;
+      }
+      readNext();
     } else {
       // Done - send EOF
       fileChannel.send(JSON.stringify({ type: "file-eof" }));
@@ -1375,6 +1657,12 @@ function triggerFileSend(file) {
       setTimeout(() => {
         hideFileProgressOverlay();
       }, 1500);
+    }
+  };
+  
+  const readNext = () => {
+    if (offset < file.size) {
+      readSlice(offset);
     }
   };
   
@@ -1503,6 +1791,23 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  // Register direct-pairing-request listener
+  listen("direct-pairing-request", (e) => {
+    const { clientId, sdp } = e.payload;
+    handleOfferSignal(
+      clientId,
+      sdp,
+      (answer, usingVideoTrack) => {
+        invoke("submit_direct_pairing_answer", { answer: answer.sdp }).catch(console.error);
+        hostStatusText.textContent = `Direct local P2P link paired! Stream=${usingVideoTrack ? "video" : "compatibility"}`;
+        hostStatusDot.className = "status-dot green";
+      },
+      () => {
+        invoke("submit_direct_pairing_decline").catch(console.error);
+      }
+    );
+  }).catch(console.error);
 
   viewOnboarding.classList.remove("active");
   showScreen(viewSelection);
