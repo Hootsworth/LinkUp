@@ -21,6 +21,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 static CAPTURE_RUNNING: LazyLock<Arc<AtomicBool>> = LazyLock::new(|| Arc::new(AtomicBool::new(false)));
 static CAPTURE_SLEEP_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(33);
 static KEYBOARD_HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
+static KEYBOARD_HOOK_SENDER: LazyLock<std::sync::Mutex<Option<std::sync::mpsc::Sender<rdev::Event>>>> = LazyLock::new(|| std::sync::Mutex::new(None));
 
 static CURRENT_HOST_CODE: LazyLock<std::sync::Mutex<Option<String>>> = LazyLock::new(|| std::sync::Mutex::new(None));
 static HTTP_SHUTDOWN_TX: LazyLock<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>> = LazyLock::new(|| std::sync::Mutex::new(None));
@@ -379,8 +380,10 @@ async fn apply_update(download_url: String, asset_name: String) -> Result<(), St
     {
         // Use cmd /C start to launch the installer fully detached so Windows
         // does not complain about the file being in use by this process.
+        use std::os::windows::process::CommandExt;
         std::process::Command::new("cmd")
             .args(&["/C", "start", "", temp_file_path.to_str().unwrap_or("")])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .spawn()
             .map_err(|e| e.to_string())?;
         std::process::exit(0);
@@ -545,24 +548,48 @@ fn set_keyboard_hook_active(active: bool) {
 }
 
 fn spawn_keyboard_hook(app: tauri::AppHandle) {
+    let (tx, rx) = std::sync::mpsc::channel::<rdev::Event>();
+    if let Ok(mut lock) = KEYBOARD_HOOK_SENDER.lock() {
+        *lock = Some(tx);
+    }
+
+    // Decoupled worker thread to process and emit keyboard events to webview.
+    // This keeps AppKit/CGEventTap thread callbacks extremely fast, preventing macOS OS-level event tap timeouts and crashes.
+    let worker_app = app.clone();
+    std::thread::spawn(move || {
+        while let Ok(event) = rx.recv() {
+            if KEYBOARD_HOOK_ACTIVE.load(Ordering::Relaxed) {
+                match event.event_type {
+                    rdev::EventType::KeyPress(key) => {
+                        let keycode = rdev_key_to_keycode(key);
+                        if keycode > 0 {
+                            let _ = worker_app.emit("native-key-event", serde_json::json!({
+                                "keycode": keycode,
+                                "down": true
+                            }));
+                        }
+                    }
+                    rdev::EventType::KeyRelease(key) => {
+                        let keycode = rdev_key_to_keycode(key);
+                        if keycode > 0 {
+                            let _ = worker_app.emit("native-key-event", serde_json::json!({
+                                "keycode": keycode,
+                                "down": false
+                            }));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    });
+
     std::thread::spawn(move || {
         if let Err(error) = rdev::listen(move |event| {
             if KEYBOARD_HOOK_ACTIVE.load(Ordering::Relaxed) {
-                if let rdev::EventType::KeyPress(key) = event.event_type {
-                    let keycode = rdev_key_to_keycode(key);
-                    if keycode > 0 {
-                        let _ = app.emit("native-key-event", serde_json::json!({
-                            "keycode": keycode,
-                            "down": true
-                        }));
-                    }
-                } else if let rdev::EventType::KeyRelease(key) = event.event_type {
-                    let keycode = rdev_key_to_keycode(key);
-                    if keycode > 0 {
-                        let _ = app.emit("native-key-event", serde_json::json!({
-                            "keycode": keycode,
-                            "down": false
-                        }));
+                if let Ok(lock) = KEYBOARD_HOOK_SENDER.lock() {
+                    if let Some(tx) = lock.as_ref() {
+                        let _ = tx.send(event);
                     }
                 }
             }
@@ -693,8 +720,10 @@ fn read_clipboard() -> Result<String, String> {
     }
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         let output = std::process::Command::new("powershell")
             .args(&["-Command", "Get-Clipboard"])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .output()
             .map_err(|e| e.to_string())?;
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -729,8 +758,10 @@ fn write_clipboard(text: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use std::io::Write;
+        use std::os::windows::process::CommandExt;
         let mut child = std::process::Command::new("powershell")
             .args(&["-Command", "Set-Clipboard"])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .stdin(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| e.to_string())?;
