@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkUp — How It Works</title>
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="stylesheet" href="index.css">
+  <style>
+    .docs-tab-nav {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 32px;
+      border-bottom: 1px solid var(--border-light);
+      padding-bottom: 8px;
+    }
+
+    .docs-tab-btn {
+      padding: 8px 16px;
+      background: none;
+      border: 1px solid transparent;
+      border-radius: var(--radius-btn);
+      cursor: pointer;
+      font-family: var(--font-display);
+      font-size: 15px;
+      color: var(--text-muted);
+      transition: all 0.2s ease;
+    }
+
+    .docs-tab-btn:hover {
+      color: var(--charcoal);
+      background: rgba(28, 28, 28, 0.03);
+    }
+
+    .docs-tab-btn.active {
+      color: var(--charcoal);
+      border-color: var(--border-light);
+      background: var(--off-white);
+      font-weight: 500;
+      box-shadow: var(--shadow-inset);
+    }
+
+    .docs-tab-pane {
+      display: none;
+      animation: fadeIn 0.4s ease-out;
+    }
+
+    .docs-tab-pane.active {
+      display: block;
+    }
+
+    .architecture-diagram {
+      width: 100%;
+      background: var(--off-white);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-card);
+      padding: 32px;
+      margin-top: 32px;
+      display: flex;
+      justify-content: center;
+      box-shadow: var(--shadow-focus);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="landing-container">
+    <!-- Header Navigation -->
+    <header class="landing-header">
+      <a href="index.html" class="logo" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--charcoal);">
+        <img src="logo.png" alt="LinkUp" class="logo-icon" style="width: 24px; height: 24px;">
+        <span style="font-weight: 600; font-size: 18px; letter-spacing: -0.5px;">LinkUp</span>
+      </a>
+      <nav class="landing-nav">
+        <a href="index.html#home">Home</a>
+        <a href="#" class="active">How It Works</a>
+        <a href="index.html#releases">Changelog</a>
+        <a href="https://github.com/Hootsworth/LinkUp" class="nav-github" target="_blank">GitHub</a>
+      </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main style="flex: 1; padding: 48px 0; max-width: 800px; margin: 0 auto;">
+      <h1 style="font-size: 36px; font-weight: 500; color: var(--charcoal); letter-spacing: -1px; margin-bottom: 8px;">Architecture & Protocols</h1>
+      <p style="font-size: 18px; color: var(--text-muted); margin-bottom: 40px; line-height: 1.6;">
+        LinkUp is built on decentralized, peer-to-peer WebRTC data channels. Explore the core systems powering direct local handshakes, NAT traversal, and high-performance frame streaming.
+      </p>
+
+      <!-- Tabs Navigation -->
+      <div class="docs-tab-nav">
+        <button class="docs-tab-btn active" onclick="switchTab('ldsh')">Local Direct (LDSH)</button>
+        <button class="docs-tab-btn" onclick="switchTab('p2p')">Remote P2P Traversal</button>
+        <button class="docs-tab-btn" onclick="switchTab('stream')">Streaming Engine</button>
+      </div>
+
+      <!-- Tab 1: LDSH -->
+      <div id="pane-ldsh" class="docs-tab-pane active">
+        <h2 style="font-size: 22px; font-weight: 500; color: var(--charcoal); margin-bottom: 16px;">LinkUp Direct-Sync Handshake (LDSH)</h2>
+        <div style="font-size: 15px; line-height: 1.7; color: var(--text-body); display: flex; flex-direction: column; gap: 16px;">
+          <p>
+            When devices reside on the same local network or a direct route is available, LinkUp bypasses external WebSockets entirely. The Host launches a lightweight background HTTP signaling listener on port <strong>`8081`</strong> using a native Rust TCP listener.
+          </p>
+          <p>
+            The Client consolidates all of its ICE candidates upfront (known as <strong>Vanilla ICE</strong> gathering). Once candidate gathering is complete, the Client sends its WebRTC SDP offer directly to the Host via <code>POST http://&lt;host-ip&gt;:8081/pair</code>.
+          </p>
+          <p>
+            The Host intercepts the request, prompts the user to verify the pairing code, and upon authorization, responds directly with the WebRTC SDP answer in the HTTP body. The connection transitions to active P2P streaming in a single HTTP round-trip.
+          </p>
+        </div>
+
+        <div class="architecture-diagram">
+          <svg width="500" height="160" viewBox="0 0 500 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Client node -->
+            <rect x="20" y="40" width="100" height="80" rx="8" fill="#fcfbf8" stroke="#1c1c1c" stroke-width="1.5"/>
+            <text x="70" y="85" font-family="system-ui" font-size="13" fill="#1c1c1c" text-anchor="middle" font-weight="500">Client</text>
+            
+            <!-- Host node -->
+            <rect x="380" y="40" width="100" height="80" rx="8" fill="#fcfbf8" stroke="#1c1c1c" stroke-width="1.5"/>
+            <text x="430" y="80" font-family="system-ui" font-size="13" fill="#1c1c1c" text-anchor="middle" font-weight="500">Host</text>
+            <text x="430" y="98" font-family="Courier New" font-size="10" fill="#5f5f5d" text-anchor="middle">:8081</text>
+            
+            <!-- HTTP Arrow -->
+            <path d="M130 65H370" stroke="#1c1c1c" stroke-width="1.5" stroke-dasharray="4 4"/>
+            <path d="M370 65L360 60V70L370 65Z" fill="#1c1c1c"/>
+            <text x="250" y="55" font-family="system-ui" font-size="11" fill="#5f5f5d" text-anchor="middle">1. POST /pair (Offer SDP)</text>
+
+            <!-- HTTP Response Arrow -->
+            <path d="M370 95H130" stroke="#1c1c1c" stroke-width="1.5"/>
+            <path d="M130 95L140 90V100L130 95Z" fill="#1c1c1c"/>
+            <text x="250" y="112" font-family="system-ui" font-size="11" fill="#5f5f5d" text-anchor="middle">2. Response 200 (Answer SDP)</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tab 2: P2P -->
+      <div id="pane-p2p" class="docs-tab-pane">
+        <h2 style="font-size: 22px; font-weight: 500; color: var(--charcoal); margin-bottom: 16px;">NAT Traversal & Signaling</h2>
+        <div style="font-size: 15px; line-height: 1.7; color: var(--text-body); display: flex; flex-direction: column; gap: 16px;">
+          <p>
+            When devices reside on different internet networks behind home routers or office firewalls, direct TCP connections are blocked. LinkUp resolves this using standard WebRTC traversal mechanisms.
+          </p>
+          <p>
+            First, it connects to a lightweight signaling server via WebSockets to negotiate connection metadata. During this handshake, both peers consult STUN (Session Traversal Utilities for NAT) servers to discover their public-facing IP addresses and port bindings.
+          </p>
+          <p>
+            If both peers are behind strict, symmetric NAT firewalls that prevent direct traversal, the connection automatically routes its streams through a secure, encrypted TURN (Traversal Using Relays around NAT) server. Data remains end-to-end encrypted (DTLS-SRTP), preventing any middle-hop interception.
+          </p>
+        </div>
+
+        <div class="architecture-diagram">
+          <svg width="500" height="180" viewBox="0 0 500 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Nodes -->
+            <rect x="20" y="110" width="100" height="60" rx="8" fill="#fcfbf8" stroke="#1c1c1c" stroke-width="1.5"/>
+            <text x="70" y="145" font-family="system-ui" font-size="13" fill="#1c1c1c" text-anchor="middle" font-weight="500">Client</text>
+
+            <rect x="380" y="110" width="100" height="60" rx="8" fill="#fcfbf8" stroke="#1c1c1c" stroke-width="1.5"/>
+            <text x="430" y="145" font-family="system-ui" font-size="13" fill="#1c1c1c" text-anchor="middle" font-weight="500">Host</text>
+
+            <rect x="200" y="10" width="100" height="60" rx="8" fill="#fcfbf8" stroke="#5f5f5d" stroke-dasharray="2 2" stroke-width="1.5"/>
+            <text x="250" y="45" font-family="system-ui" font-size="12" fill="#1c1c1c" text-anchor="middle" font-weight="500">STUN/TURN</text>
+
+            <!-- Lines -->
+            <path d="M110 110L200 65" stroke="#5f5f5d" stroke-width="1.2" stroke-dasharray="3 3"/>
+            <path d="M390 110L300 65" stroke="#5f5f5d" stroke-width="1.2" stroke-dasharray="3 3"/>
+            
+            <path d="M120 140H380" stroke="#2e7d32" stroke-width="2"/>
+            <path d="M380 140L370 135V145L380 140Z" fill="#2e7d32"/>
+            <path d="M120 140L130 135V145L120 140Z" fill="#2e7d32"/>
+            <text x="250" y="132" font-family="system-ui" font-size="11" fill="#2e7d32" text-anchor="middle" font-weight="500">Direct P2P WebRTC Tunnel</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tab 3: Stream -->
+      <div id="pane-stream" class="docs-tab-pane">
+        <h2 style="font-size: 22px; font-weight: 500; color: var(--charcoal); margin-bottom: 16px;">The Adaptive Streaming Pipeline</h2>
+        <div style="font-size: 15px; line-height: 1.7; color: var(--text-body); display: flex; flex-direction: column; gap: 16px;">
+          <p>
+            To deliver low-latency remote display casting, LinkUp does not use heavy video compression servers. On Windows, GDI and DXGI graphics adapters are polled natively in Rust, capturing the screen desktop as a stream of raw frames.
+          </p>
+          <p>
+            Each frame is converted directly to JPEG format inside a fast Rust thread pool. The resulting compressed binary payload is streamed over WebRTC data channels using optimized flow control thresholds to prevent buffer overflows.
+          </p>
+          <p>
+            The Client monitors connection latency (ping round-trip times) dynamically. If the latency rises, the Client automatically transmits quality adaptation events over the input channel, instructing the Host to scale down frame quality and increase capture sleep intervals on-the-fly to ensure responsive mouse controls.
+          </p>
+        </div>
+
+        <div class="architecture-diagram">
+          <svg width="500" height="160" viewBox="0 0 500 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Capture -->
+            <rect x="10" y="50" width="80" height="60" rx="4" fill="#fcfbf8" stroke="#1c1c1c" stroke-width="1.5"/>
+            <text x="50" y="85" font-family="system-ui" font-size="11" fill="#1c1c1c" text-anchor="middle">DXGI Capture</text>
+
+            <path d="M90 80H130" stroke="#1c1c1c" stroke-width="1.5"/>
+            <path d="M130 80L122 75V85L130 80Z" fill="#1c1c1c"/>
+
+            <!-- Compression -->
+            <rect x="130" y="50" width="90" height="60" rx="4" fill="#fcfbf8" stroke="#1c1c1c" stroke-width="1.5"/>
+            <text x="175" y="85" font-family="system-ui" font-size="11" fill="#1c1c1c" text-anchor="middle">Rust JPEG Pool</text>
+
+            <path d="M220 80H260" stroke="#2e7d32" stroke-width="1.5"/>
+            <path d="M260 80L252 75V85L260 80Z" fill="#2e7d32"/>
+
+            <!-- WebRTC channel -->
+            <rect x="260" y="50" width="100" height="60" rx="4" fill="#fcfbf8" stroke="#2e7d32" stroke-width="1.5"/>
+            <text x="310" y="85" font-family="system-ui" font-size="11" fill="#2e7d32" text-anchor="middle">WebRTC Channel</text>
+
+            <path d="M360 80H400" stroke="#1c1c1c" stroke-width="1.5"/>
+            <path d="M400 80L392 75V85L400 80Z" fill="#1c1c1c"/>
+
+            <!-- Render -->
+            <rect x="400" y="50" width="90" height="60" rx="4" fill="#fcfbf8" stroke="#1c1c1c" stroke-width="1.5"/>
+            <text x="445" y="85" font-family="system-ui" font-size="11" fill="#1c1c1c" text-anchor="middle">Canvas Render</text>
+          </svg>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer style="margin-top: auto; padding: 48px 0; border-top: 1px solid var(--border-light); font-size: 14px; color: var(--text-muted); text-align: center;">
+      <p>&copy; 2026 Hootsworth. All rights reserved.</p>
+    </footer>
+  </div>
+
+  <!-- Tabs Switcher JS Script -->
+  <script>
+    function switchTab(tabId) {
+      // Deactivate all buttons and panes
+      document.querySelectorAll('.docs-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      document.querySelectorAll('.docs-tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+      });
+
+      // Activate selected button and pane
+      const targetBtn = Array.from(document.querySelectorAll('.docs-tab-btn')).find(btn => {
+        return btn.getAttribute('onclick').includes(tabId);
+      });
+      const targetPane = document.getElementById('pane-' + tabId);
+
+      if (targetBtn) targetBtn.classList.add('active');
+      if (targetPane) targetPane.classList.add('active');
+    }
+  </script>
+</body>
+
+</html>
