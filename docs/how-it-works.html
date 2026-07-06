@@ -115,10 +115,10 @@
             When devices reside on the same local network or a direct route is available, LinkUp bypasses external WebSockets entirely. The Host launches a lightweight background HTTP signaling listener on port <strong>`8081`</strong> using a native Rust TCP listener.
           </p>
           <p>
-            The Client consolidates all of its ICE candidates upfront (known as <strong>Vanilla ICE</strong> gathering). Once candidate gathering is complete, the Client sends its WebRTC SDP offer directly to the Host via <code>POST http://&lt;host-ip&gt;:8081/pair</code>.
+            The Client consolidates all of its ICE candidates upfront (known as <strong>Vanilla ICE</strong> gathering). Once candidate gathering is complete, the Client automatically resolves the host's IP address on the local network using the connection passphrase and sends its WebRTC SDP offer directly to the Host via <code>POST http://&lt;host-ip&gt;:8081/pair</code>.
           </p>
           <p>
-            The Host intercepts the request, prompts the user to verify the pairing code, and upon authorization, responds directly with the WebRTC SDP answer in the HTTP body. The connection transitions to active P2P streaming in a single HTTP round-trip.
+            The Host intercepts the request, prompts the user to verify the connection pairing phrase, and upon authorization, responds directly with the WebRTC SDP answer in the HTTP body. The connection transitions to active P2P streaming in a single HTTP round-trip.
           </p>
         </div>
 

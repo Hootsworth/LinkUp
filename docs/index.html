@@ -62,8 +62,8 @@
                 <div class="mock-content">
                   <div class="mock-pairing-box">
                     <span class="mock-eyebrow">Host Session Active</span>
-                    <div class="mock-code">482 917</div>
-                    <span class="mock-ip">Host IP: 192.168.1.108</span>
+                    <div class="mock-code" style="font-size: 20px; letter-spacing: 0.5px; margin: 16px 0;">crane-yellow-sunset</div>
+                    <span class="mock-ip">Zero-configuration connection phrase</span>
                     <div class="mock-pulse-dot"></div>
                   </div>
                 </div>
@@ -79,7 +79,7 @@
                 <h3>macOS (Apple Silicon)</h3>
                 <p>M1 / M2 / M3 processors</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.3.0/LinkUp_0.3.0_aarch64.dmg"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.4.0/LinkUp_0.4.0_aarch64.dmg"
                 class="btn btn-ghost btn-full">Download DMG</a>
             </div>
 
@@ -88,7 +88,7 @@
                 <h3>macOS (Intel Core)</h3>
                 <p>Intel-based Mac computers</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.3.0/LinkUp_0.3.0_x64.dmg"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.4.0/LinkUp_0.4.0_x64.dmg"
                 class="btn btn-ghost btn-full">Download DMG</a>
             </div>
 
@@ -97,7 +97,7 @@
                 <h3>Windows 10 / 11</h3>
                 <p>64-bit installer setup</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.3.0/LinkUp_0.3.0_x64-setup.exe"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.4.0/LinkUp_0.4.0_x64-setup.exe"
                 class="btn btn-ghost btn-full">Download EXE</a>
             </div>
 
@@ -106,7 +106,7 @@
                 <h3>Linux (Ubuntu / Debian)</h3>
                 <p>64-bit Debian package</p>
               </div>
-              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.3.0/linkup_0.3.0_amd64.deb"
+              <a href="https://github.com/Hootsworth/LinkUp/releases/download/v0.4.0/linkup_0.4.0_amd64.deb"
                 class="btn btn-ghost btn-full">Download DEB</a>
             </div>
           </div>
@@ -180,6 +180,24 @@
           <p class="features-lead" style="margin-bottom: 40px;">Changelog and release notes for all LinkUp software versions.</p>
 
           <div class="release-changelog" style="display: flex; flex-direction: column; gap: 48px; text-align: left; width: 100%;">
+            <!-- v0.4.0 Release Notes -->
+            <div class="release-version" style="border-bottom: 1px solid var(--hairline-strong); padding-bottom: 32px;">
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
+                <h3 style="font-family: var(--font-display); font-size: 28px; font-weight: 500; color: var(--ink); margin: 0;">v0.4.0 (Milestone 3 Traversal & Multi-Monitor Layouts Release)</h3>
+                <span style="font-family: var(--font-mono); font-size: 12px; color: var(--muted);">July 6, 2026</span>
+              </div>
+              <p style="font-size: 15px; color: var(--body); line-height: 1.6; margin-bottom: 18px;">
+                This release implements Milestone 3 features, enabling symmetric NAT traversal configuration, side-by-side / PiP multi-monitor viewports, native window fullscreening, and introduces a zero-configuration mnemonic connection phrase method.
+              </p>
+              <h4 style="font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px;">Key Updates:</h4>
+              <ul style="padding-left: 20px; color: var(--body); font-size: 14px; line-height: 1.8; display: flex; flex-direction: column; gap: 8px; margin-bottom: 0;">
+                <li><strong>TURN Traversal Settings:</strong> Added a profile selector in settings for STUN-Only, Community TURN Relay, or Custom TURN server configurations to ensure connectivity behind strict symmetric NAT firewalls.</li>
+                <li><strong>Multi-Monitor Layouts:</strong> Full support for streaming secondary monitors side-by-side or picture-in-picture, including hover coordinate translation for keyboard/mouse inputs targeting either active screen.</li>
+                <li><strong>Native Fullscreen Option:</strong> A toggle in the client workspace requests full operating-system level screen coverage (hiding taskbars, docks, and system borders).</li>
+                <li><strong>Passphrase Connection:</strong> Introduced a conceptual 3-word passphrase system (`crane-yellow-sunset`) for secure, user-friendly device pairings replacing numeric code and IP input fields.</li>
+              </ul>
+            </div>
+
             <!-- v0.3.0 Release Notes -->
             <div class="release-version" style="border-bottom: 1px solid var(--hairline-strong); padding-bottom: 32px;">
               <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
