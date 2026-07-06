@@ -94,6 +94,7 @@ body {
   letter-spacing: -0.5px;
   color: var(--text-primary);
   text-decoration: none;
+  cursor: pointer;
 }
 
 .logo-icon {
