@@ -1,7 +1,4 @@
 // Hardware OS and Architecture Detection
-const btnDownload = document.getElementById("btn-primary-download");
-const labelOs = document.getElementById("detected-os-label");
-
 const RELEASE_BASE = "https://github.com/Hootsworth/LinkUp/releases/download/v0.3.0";
 const RELEASE_PAGE = "https://github.com/Hootsworth/LinkUp/releases/latest";
 
@@ -33,6 +30,10 @@ function isAppleSilicon() {
 }
 
 function detectOS() {
+  const btnDownload = document.getElementById("btn-primary-download");
+  const labelOs = document.getElementById("detected-os-label");
+  if (!btnDownload || !labelOs) return;
+
   const ua = navigator.userAgent.toLowerCase();
 
   if (ua.includes("macintosh") || ua.includes("mac os")) {
@@ -69,6 +70,9 @@ function handleRouting() {
     '#features': { screen: document.getElementById("screen-features"), nav: document.getElementById("nav-features") },
     '#releases': { screen: document.getElementById("screen-releases"), nav: document.getElementById("nav-releases") }
   };
+
+  const hasRoutingScreens = Object.values(screens).some(item => item.screen !== null);
+  if (!hasRoutingScreens) return;
   
   Object.values(screens).forEach(item => {
     if (item.screen) item.screen.classList.remove("active");
@@ -76,14 +80,50 @@ function handleRouting() {
   });
   
   const activeItem = screens[hash] || screens['#home'];
-  if (activeItem.screen) activeItem.screen.classList.add("active");
-  if (activeItem.nav) activeItem.nav.classList.add("active");
+  if (activeItem) {
+    if (activeItem.screen) activeItem.screen.classList.add("active");
+    if (activeItem.nav) activeItem.nav.classList.add("active");
+  }
 }
 
+// Tabs Switcher for Documentation Page
+function switchTab(tabId) {
+  document.querySelectorAll('.docs-tab-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  document.querySelectorAll('.docs-tab-pane').forEach(pane => {
+    pane.classList.remove('active');
+  });
+
+  const targetBtn = Array.from(document.querySelectorAll('.docs-tab-btn')).find(btn => {
+    const clickAttr = btn.getAttribute('onclick') || '';
+    return clickAttr.includes(tabId);
+  });
+  const targetPane = document.getElementById('pane-' + tabId);
+
+  if (targetBtn) targetBtn.classList.add('active');
+  if (targetPane) targetPane.classList.add('active');
+}
+window.switchTab = switchTab;
+
+// Sticky Header Scroll Effect
+function handleHeaderScroll() {
+  const header = document.querySelector(".landing-header");
+  if (header) {
+    if (window.scrollY > 10) {
+      header.classList.add("scrolled");
+    } else {
+      header.classList.remove("scrolled");
+    }
+  }
+}
+
+window.addEventListener("scroll", handleHeaderScroll);
 window.addEventListener("hashchange", handleRouting);
 window.addEventListener("DOMContentLoaded", () => {
   detectOS();
   handleRouting();
+  handleHeaderScroll();
 });
 
 // ----------------------------------------------------

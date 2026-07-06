@@ -80,6 +80,7 @@
       <nav class="header-nav">
         <a href="index.html#home" class="nav-link">Download</a>
         <a href="#" class="nav-link active">How It Works</a>
+        <a href="index.html#features" class="nav-link">Features</a>
         <a href="index.html#releases" class="nav-link">Release Notes</a>
         <a href="https://github.com/Hootsworth/LinkUp" target="_blank" class="github-link btn-ghost btn-sm">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -92,7 +93,8 @@
     </header>
 
     <!-- Main Content -->
-    <main style="flex: 1; padding: 48px 0; max-width: 800px; margin: 0 auto;">
+    <main class="landing-main">
+      <div style="max-width: 800px; margin: 0 auto; padding: 48px 24px;">
       <h1 style="font-size: 36px; font-weight: 500; color: var(--charcoal); letter-spacing: -1px; margin-bottom: 8px;">Architecture & Protocols</h1>
       <p style="font-size: 18px; color: var(--text-muted); margin-bottom: 40px; line-height: 1.6;">
         LinkUp is built on decentralized, peer-to-peer WebRTC data channels. Explore the core systems powering direct local handshakes, NAT traversal, and high-performance frame streaming.
@@ -230,32 +232,13 @@
     </main>
 
     <!-- Footer -->
-    <footer style="margin-top: auto; padding: 48px 0; border-top: 1px solid var(--border-light); font-size: 14px; color: var(--text-muted); text-align: center;">
-      <p>&copy; 2026 Hootsworth. All rights reserved.</p>
+    <footer class="landing-footer">
+      <div class="footer-logo">linkup</div>
+      <p class="footer-copy">© 2026 LinkUp. Open source under Apache 2.0 license.<br>Self-hosted coturn traversal.</p>
     </footer>
   </div>
 
-  <!-- Tabs Switcher JS Script -->
-  <script>
-    function switchTab(tabId) {
-      // Deactivate all buttons and panes
-      document.querySelectorAll('.docs-tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-      });
-      document.querySelectorAll('.docs-tab-pane').forEach(pane => {
-        pane.classList.remove('active');
-      });
-
-      // Activate selected button and pane
-      const targetBtn = Array.from(document.querySelectorAll('.docs-tab-btn')).find(btn => {
-        return btn.getAttribute('onclick').includes(tabId);
-      });
-      const targetPane = document.getElementById('pane-' + tabId);
-
-      if (targetBtn) targetBtn.classList.add('active');
-      if (targetPane) targetPane.classList.add('active');
-    }
-  </script>
+  <script src="main.js"></script>
 </body>
 
 </html>
