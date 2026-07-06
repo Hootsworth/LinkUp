@@ -410,8 +410,25 @@ function resetSession() {
   reconnectAttempts = 0;
 }
 
+const MNEMONIC_WORDS = [
+  "crane", "yellow", "sunset", "ocean", "breeze", "mountain", "forest", "river", "glacier", "desert",
+  "cactus", "canyon", "meadow", "valley", "spring", "autumn", "winter", "summer", "canopy", "pebble",
+  "shadow", "light", "aurora", "comet", "galaxy", "nebula", "planet", "crater", "crescent", "horizon",
+  "summit", "tundra", "island", "lagoon", "harbor", "anchor", "compass", "beacon", "voyage", "safari"
+];
+
 function generateSessionCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  const w1 = MNEMONIC_WORDS[Math.floor(Math.random() * MNEMONIC_WORDS.length)];
+  const w2 = MNEMONIC_WORDS[Math.floor(Math.random() * MNEMONIC_WORDS.length)];
+  const w3 = MNEMONIC_WORDS[Math.floor(Math.random() * MNEMONIC_WORDS.length)];
+  return `${w1}-${w2}-${w3}`;
+}
+
+function formatConnectionCode(code) {
+  if (!code) return "";
+  if (code.includes("-")) return code;
+  if (code.length === 6) return code.slice(0, 3) + " " + code.slice(3);
+  return code;
 }
 
 // ----------------------------------------------------
@@ -453,8 +470,8 @@ btnModeHost.addEventListener("click", () => {
       
       if (msg.type === 'registered') {
         isRegistered = true;
-        localConnectionCode.textContent = msg.id.slice(0, 3) + " " + msg.id.slice(3);
-        hostStatusText.textContent = "Waiting for connection code pairing...";
+        localConnectionCode.textContent = formatConnectionCode(msg.id);
+        hostStatusText.textContent = "Waiting for connection phrase pairing...";
       }
       
       else if (msg.type === 'signal') {
@@ -834,9 +851,10 @@ btnClientBack.addEventListener("click", () => {
 });
 
 btnClientConnect.addEventListener("click", () => {
-  const code = inputHostCode.value.trim();
-  if (code.length !== 6 || isNaN(code)) {
-    clientError.textContent = "Please enter a valid 6-digit connection code";
+  const code = inputHostCode.value.trim().toLowerCase();
+  const parts = code.split("-");
+  if (parts.length !== 3 || parts.some(p => p.length < 2)) {
+    clientError.textContent = "Please enter a valid 3-word connection phrase (e.g. crane-yellow-sunset)";
     clientError.style.display = "block";
     return;
   }
@@ -1194,7 +1212,7 @@ async function setupClientPeerConnection(targetHostCode, localClientId) {
   
   screenChannel.onopen = () => {
     console.log("Screen data channel opened on client side — waiting for frames");
-    remoteHostInfo.textContent = `Viewing Host: ${targetHostCode.slice(0, 3)} ${targetHostCode.slice(3)} | Channel open, waiting for frames...`;
+    remoteHostInfo.textContent = `Viewing Host: ${formatConnectionCode(targetHostCode)} | Channel open, waiting for frames...`;
   };
   screenChannel.onerror = (err) => {
     console.error("Client screen channel error:", err);
@@ -1206,7 +1224,7 @@ async function setupClientPeerConnection(targetHostCode, localClientId) {
     remoteScreenImg.classList.add("fallback-active");
     remoteScreenImg.src = "data:image/jpeg;base64," + e.data;
     if (framesReceived % 30 === 0) {
-      remoteHostInfo.textContent = `Viewing Host: ${targetHostCode.slice(0, 3)} ${targetHostCode.slice(3)} | ${framesReceived} frames received`;
+      remoteHostInfo.textContent = `Viewing Host: ${formatConnectionCode(targetHostCode)} | ${framesReceived} frames received`;
     }
   };
   
@@ -1543,7 +1561,7 @@ function renderRecentConnections() {
     div.className = "recent-item";
     
     const timeStr = getRelativeTimeString(item.timestamp);
-    const displayCode = item.code.slice(0, 3) + " " + item.code.slice(3);
+    const displayCode = formatConnectionCode(item.code);
     
     div.innerHTML = `
       <div class="recent-item-info">
@@ -2189,9 +2207,9 @@ function handleIncomingTrack(event) {
     // Update connection status label
     const targetHostCode = savedHostCode || "";
     if (remoteStreams.length > 1) {
-      remoteHostInfo.textContent = `Viewing Host: ${targetHostCode.slice(0, 3)} ${targetHostCode.slice(3)} | Dual Monitor stream`;
+      remoteHostInfo.textContent = `Viewing Host: ${formatConnectionCode(targetHostCode)} | Dual Monitor stream`;
     } else {
-      remoteHostInfo.textContent = `Viewing Host: ${targetHostCode.slice(0, 3)} ${targetHostCode.slice(3)} | HD video stream`;
+      remoteHostInfo.textContent = `Viewing Host: ${formatConnectionCode(targetHostCode)} | HD video stream`;
     }
   }
 }
@@ -2224,45 +2242,7 @@ window.addEventListener("DOMContentLoaded", () => {
   // Render recent connections list
   renderRecentConnections();
   
-  // Segmented code slot synchronization logic
-  const codeSlots = Array.from(document.querySelectorAll(".code-slot"));
-  if (inputHostCode && codeSlots.length > 0) {
-    const segmentedContainer = document.getElementById("segmented-code-container");
-    if (segmentedContainer) {
-      segmentedContainer.addEventListener("click", () => {
-        inputHostCode.focus();
-      });
-    }
-    
-    const updateSlots = () => {
-      const val = inputHostCode.value;
-      codeSlots.forEach((slot, idx) => {
-        if (idx < val.length) {
-          slot.textContent = val[idx];
-          slot.classList.add("filled");
-        } else {
-          slot.textContent = "-";
-          slot.classList.remove("filled");
-        }
-        
-        // Highlight active slot
-        if (document.activeElement === inputHostCode && idx === val.length) {
-          slot.classList.add("active");
-        } else {
-          slot.classList.remove("active");
-        }
-      });
-    };
-    
-    inputHostCode.addEventListener("input", updateSlots);
-    inputHostCode.addEventListener("focus", updateSlots);
-    inputHostCode.addEventListener("blur", () => {
-      codeSlots.forEach(slot => slot.classList.remove("active"));
-    });
-    
-    // Initial sync
-    updateSlots();
-  }
+
   
   // Hook up file select buttons
   if (btnTransferFile) {
