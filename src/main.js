@@ -52,6 +52,12 @@ const clientError = document.getElementById("client-error");
 // Viewport Page Elements
 const btnClientDisconnect = document.getElementById("btn-client-disconnect");
 const remoteScreenVideo = document.getElementById("remote-screen-video");
+const remoteScreenVideoSecondary = document.getElementById("remote-screen-video-secondary");
+const videoWrapperPrimary = document.getElementById("video-wrapper-primary");
+const videoWrapperSecondary = document.getElementById("video-wrapper-secondary");
+const selectRemoteLayout = document.getElementById("select-remote-layout");
+const floatingLayoutContainer = document.getElementById("floating-layout-container");
+const btnClientFullscreen = document.getElementById("btn-client-fullscreen");
 const remoteScreenImg = document.getElementById("remote-screen-img");
 const remoteHostInfo = document.getElementById("remote-host-info");
 
@@ -60,6 +66,8 @@ const btnToggleSettings = document.getElementById("btn-toggle-settings");
 const btnSaveSettings = document.getElementById("btn-save-settings");
 const btnSettingsBack = document.getElementById("btn-settings-back");
 const inputSigUrl = document.getElementById("input-sig-url");
+const selectTurnProfile = document.getElementById("select-turn-profile");
+const customTurnFields = document.getElementById("custom-turn-fields");
 const inputTurnUrl = document.getElementById("input-turn-url");
 const inputTurnUser = document.getElementById("input-turn-user");
 const inputTurnPass = document.getElementById("input-turn-pass");
@@ -117,6 +125,7 @@ let fileChannel = null; // Dedicated binary file transfer datachannel
 let localTauriFrameUnlisten = null;
 let localTauriClipboardUnlisten = null;
 let localScreenStream = null;
+let remoteStreams = [];
 let activeRole = null; // 'host' or 'client'
 let currentSlideIndex = 0;
 
@@ -152,18 +161,27 @@ let iceCandidateBuffer = [];
 // ----------------------------------------------------
 function loadSettings() {
   const sigUrl = localStorage.getItem("linkup_sig_url") || "ws://localhost:8080";
+  const turnProfile = localStorage.getItem("linkup_turn_profile") || "community";
   const turnUrl = localStorage.getItem("linkup_turn_url") || "";
   const turnUser = localStorage.getItem("linkup_turn_user") || "linkupuser";
   const turnPass = localStorage.getItem("linkup_turn_pass") || "linkuppassword";
   
   inputSigUrl.value = sigUrl;
+  selectTurnProfile.value = turnProfile;
   inputTurnUrl.value = turnUrl;
   inputTurnUser.value = turnUser;
   inputTurnPass.value = turnPass;
+
+  if (turnProfile === "custom") {
+    customTurnFields.style.display = "grid";
+  } else {
+    customTurnFields.style.display = "none";
+  }
 }
 
 function saveSettings() {
   localStorage.setItem("linkup_sig_url", inputSigUrl.value.trim());
+  localStorage.setItem("linkup_turn_profile", selectTurnProfile.value);
   localStorage.setItem("linkup_turn_url", inputTurnUrl.value.trim());
   localStorage.setItem("linkup_turn_user", inputTurnUser.value.trim());
   localStorage.setItem("linkup_turn_pass", inputTurnPass.value.trim());
@@ -171,26 +189,44 @@ function saveSettings() {
 
 // Generate dynamic ICE configuration based on settings
 function getIceConfiguration() {
-  const turnUrl = inputTurnUrl.value.trim();
-  const turnUser = inputTurnUser.value.trim();
-  const turnPass = inputTurnPass.value.trim();
+  const profile = selectTurnProfile.value;
   
   const servers = [
     { urls: "stun:stun.l.google.com:19302" } // Public Google STUN
   ];
   
-  if (turnUrl) {
+  if (profile === "community") {
     servers.push({
-      urls: turnUrl,
-      username: turnUser,
-      credential: turnPass
+      urls: "turn:relay.linkup.app:3478",
+      username: "community",
+      credential: "password"
     });
+  } else if (profile === "custom") {
+    const turnUrl = inputTurnUrl.value.trim();
+    const turnUser = inputTurnUser.value.trim();
+    const turnPass = inputTurnPass.value.trim();
+    
+    if (turnUrl) {
+      servers.push({
+        urls: turnUrl,
+        username: turnUser,
+        credential: turnPass
+      });
+    }
   }
   
   return { iceServers: servers };
 }
 
 // Settings Actions
+selectTurnProfile.addEventListener("change", () => {
+  if (selectTurnProfile.value === "custom") {
+    customTurnFields.style.display = "grid";
+  } else {
+    customTurnFields.style.display = "none";
+  }
+});
+
 btnToggleSettings.addEventListener("click", () => {
   showScreen(viewSettings);
 });
@@ -347,6 +383,20 @@ function cleanupWebRTC() {
   }
   remoteScreenVideo.srcObject = null;
   remoteScreenVideo.classList.remove("fallback-hidden");
+
+  if (remoteScreenVideoSecondary.srcObject) {
+    remoteScreenVideoSecondary.srcObject.getTracks().forEach(track => track.stop());
+  }
+  remoteScreenVideoSecondary.srcObject = null;
+  remoteScreenVideoSecondary.classList.remove("fallback-hidden");
+
+  remoteStreams = [];
+  floatingLayoutContainer.style.display = "none";
+  const viewportContainer = document.getElementById("viewport-container");
+  if (viewportContainer) {
+    viewportContainer.className = "remote-viewport-container";
+  }
+
   remoteScreenImg.src = "";
   remoteScreenImg.classList.remove("fallback-active");
   clientError.style.display = "none";
@@ -537,13 +587,14 @@ function setupHostPeerConnection(senderId) {
             return;
           }
           if (inputEvent.type === "move") {
-            invoke("send_mouse_move", { x: inputEvent.x, y: inputEvent.y });
+            invoke("send_mouse_move", { x: inputEvent.x, y: inputEvent.y, display: inputEvent.display });
           } else if (inputEvent.type === "click") {
             invoke("send_mouse_click", {
               button: inputEvent.button,
               down: inputEvent.down,
               x: inputEvent.x,
-              y: inputEvent.y
+              y: inputEvent.y,
+              display: inputEvent.display
             });
           } else if (inputEvent.type === "key") {
             invoke("send_key_event", {
@@ -655,7 +706,39 @@ async function startHostScreenShare(senderId) {
     if (sender) {
       await tuneVideoSender(sender);
     }
-    hostStatusText.textContent = "Streaming screen as WebRTC video...";
+
+    // Secondary monitor capture prompt
+    let secondaryStream = null;
+    if (confirm("LinkUp: Do you want to capture and share a secondary display for multi-monitor layout?")) {
+      try {
+        secondaryStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30, max: 60 }
+          }
+        });
+        if (secondaryStream) {
+          const [secVideoTrack] = secondaryStream.getVideoTracks();
+          if (secVideoTrack) {
+            secVideoTrack.onended = () => {
+              if (activeRole === "host") {
+                resetSession();
+              }
+            };
+            const secSender = peerConnection.addTrack(secVideoTrack, secondaryStream);
+            await tuneVideoSender(secSender);
+            console.log("Secondary WebRTC display track attached successfully.");
+          }
+        }
+      } catch (secErr) {
+        console.log("Secondary screen selection cancelled or failed:", secErr);
+      }
+    }
+
+    hostStatusText.textContent = secondaryStream 
+      ? "Streaming dual screens as WebRTC video tracks..." 
+      : "Streaming screen as WebRTC video...";
     return true;
   } catch (videoErr) {
     console.warn("WebRTC video capture failed, falling back to JPEG data channel:", videoErr);
@@ -945,17 +1028,7 @@ async function connectDirectClientViewer(hostIp) {
     };
     
     peerConnection.ontrack = (event) => {
-      const [stream] = event.streams;
-      if (stream) {
-        remoteScreenVideo.srcObject = stream;
-      } else {
-        remoteScreenVideo.srcObject = new MediaStream([event.track]);
-      }
-      remoteScreenVideo.muted = false; // Enable audio track playback
-      remoteScreenVideo.classList.remove("fallback-hidden");
-      remoteScreenImg.classList.remove("fallback-active");
-      remoteHostInfo.textContent = `Viewing Host: ${savedHostCode.slice(0, 3)} ${savedHostCode.slice(3)} | Direct P2P video stream`;
-      remoteScreenVideo.play().catch((e) => console.warn("Unable to auto-play remote video:", e));
+      handleIncomingTrack(event);
     };
     
   } catch (err) {
@@ -1108,17 +1181,7 @@ async function setupClientPeerConnection(targetHostCode, localClientId) {
   };
 
   peerConnection.ontrack = (event) => {
-    const [stream] = event.streams;
-    if (stream) {
-      remoteScreenVideo.srcObject = stream;
-    } else {
-      remoteScreenVideo.srcObject = new MediaStream([event.track]);
-    }
-    remoteScreenVideo.muted = false; // Enable audio track playback
-    remoteScreenVideo.classList.remove("fallback-hidden");
-    remoteScreenImg.classList.remove("fallback-active");
-    remoteHostInfo.textContent = `Viewing Host: ${targetHostCode.slice(0, 3)} ${targetHostCode.slice(3)} | HD video stream`;
-    remoteScreenVideo.play().catch((e) => console.warn("Unable to auto-play remote video:", e));
+    handleIncomingTrack(event);
   };
 
   // Create data channels
@@ -1189,24 +1252,26 @@ btnClientDisconnect.addEventListener("click", () => {
 // 3. INPUT INTERCEPTIONS (CLIENT SIDE)
 // ----------------------------------------------------
 function getNormalizedCoordinates(e) {
-  const target = remoteScreenImg.classList.contains("fallback-active") ? remoteScreenImg : remoteScreenVideo;
+  const target = e.currentTarget || e.target;
   const rect = target.getBoundingClientRect();
   const x = (e.clientX - rect.left) / rect.width;
   const y = (e.clientY - rect.top) / rect.height;
+  const display = target === remoteScreenVideoSecondary ? 1 : 0;
   
   return {
     x: Math.max(0.0, Math.min(1.0, x)),
-    y: Math.max(0.0, Math.min(1.0, y))
+    y: Math.max(0.0, Math.min(1.0, y)),
+    display
   };
 }
 
 function handleMouseMove(e) {
   if (viewRemoteView.classList.contains("active") && inputChannel && inputChannel.readyState === "open") {
-    let x, y;
-    const target = remoteScreenImg.classList.contains("fallback-active") ? remoteScreenImg : remoteScreenVideo;
+    let x, y, display = 0;
+    const activeLock = document.pointerLockElement;
     
-    if (document.pointerLockElement === target) {
-      const rect = target.getBoundingClientRect();
+    if (activeLock && (activeLock === remoteScreenVideo || activeLock === remoteScreenVideoSecondary || activeLock === remoteScreenImg)) {
+      const rect = activeLock.getBoundingClientRect();
       virtualMouseX += e.movementX / rect.width;
       virtualMouseY += e.movementY / rect.height;
       
@@ -1215,16 +1280,18 @@ function handleMouseMove(e) {
       
       x = virtualMouseX;
       y = virtualMouseY;
+      display = activeLock === remoteScreenVideoSecondary ? 1 : 0;
     } else {
       const coords = getNormalizedCoordinates(e);
       x = coords.x;
       y = coords.y;
+      display = coords.display;
       
       virtualMouseX = x;
       virtualMouseY = y;
     }
     
-    inputChannel.send(JSON.stringify({ type: "move", x, y }));
+    inputChannel.send(JSON.stringify({ type: "move", x, y, display }));
     
     // Position local cursor echo overlay inside viewport
     const container = document.getElementById("viewport-container");
@@ -1232,6 +1299,7 @@ function handleMouseMove(e) {
       const containerRect = container.getBoundingClientRect();
       let localX, localY;
       
+      const target = activeLock || e.currentTarget || e.target;
       if (document.pointerLockElement === target) {
         const rect = target.getBoundingClientRect();
         localX = rect.left - containerRect.left + (virtualMouseX * rect.width);
@@ -1248,8 +1316,8 @@ function handleMouseMove(e) {
   }
 }
 
-function requestPointerLockOnViewport() {
-  const target = remoteScreenImg.classList.contains("fallback-active") ? remoteScreenImg : remoteScreenVideo;
+function requestPointerLockOnViewport(e) {
+  const target = e.currentTarget || e.target;
   if (document.pointerLockElement !== target) {
     target.requestPointerLock().catch(err => {
       console.warn("Pointer lock request failed:", err);
@@ -1258,12 +1326,17 @@ function requestPointerLockOnViewport() {
 }
 
 remoteScreenVideo.addEventListener("click", requestPointerLockOnViewport);
+remoteScreenVideoSecondary.addEventListener("click", requestPointerLockOnViewport);
 remoteScreenImg.addEventListener("click", requestPointerLockOnViewport);
 
 remoteScreenVideo.addEventListener("mousemove", handleMouseMove);
+remoteScreenVideoSecondary.addEventListener("mousemove", handleMouseMove);
 remoteScreenImg.addEventListener("mousemove", handleMouseMove);
 
 remoteScreenVideo.addEventListener("mouseleave", () => {
+  if (document.pointerLockElement === null && localCursorEcho) localCursorEcho.style.display = "none";
+});
+remoteScreenVideoSecondary.addEventListener("mouseleave", () => {
   if (document.pointerLockElement === null && localCursorEcho) localCursorEcho.style.display = "none";
 });
 remoteScreenImg.addEventListener("mouseleave", () => {
@@ -1273,7 +1346,7 @@ remoteScreenImg.addEventListener("mouseleave", () => {
 function handleMouseClick(e, isDown) {
   if (viewRemoteView.classList.contains("active") && inputChannel && inputChannel.readyState === "open") {
     e.preventDefault();
-    const { x, y } = getNormalizedCoordinates(e);
+    const { x, y, display } = getNormalizedCoordinates(e);
     
     let btn = 0;
     if (e.button === 2) {
@@ -1287,20 +1360,25 @@ function handleMouseClick(e, isDown) {
       button: btn,
       down: isDown,
       x,
-      y
+      y,
+      display
     }));
   }
 }
 
 remoteScreenVideo.addEventListener("mousedown", (e) => handleMouseClick(e, true));
 remoteScreenVideo.addEventListener("mouseup", (e) => handleMouseClick(e, false));
+remoteScreenVideoSecondary.addEventListener("mousedown", (e) => handleMouseClick(e, true));
+remoteScreenVideoSecondary.addEventListener("mouseup", (e) => handleMouseClick(e, false));
 remoteScreenImg.addEventListener("mousedown", (e) => handleMouseClick(e, true));
 remoteScreenImg.addEventListener("mouseup", (e) => handleMouseClick(e, false));
 
 remoteScreenVideo.addEventListener("contextmenu", (e) => {
   e.preventDefault();
 });
-
+remoteScreenVideoSecondary.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+});
 remoteScreenImg.addEventListener("contextmenu", (e) => {
   e.preventDefault();
 });
@@ -1938,13 +2016,7 @@ async function reconnectDirectClient() {
   };
   
   peerConnection.ontrack = (event) => {
-    const [stream] = event.streams;
-    if (stream) {
-      remoteScreenVideo.srcObject = stream;
-    } else {
-      remoteScreenVideo.srcObject = new MediaStream([event.track]);
-    }
-    remoteScreenVideo.play().catch(console.error);
+    handleIncomingTrack(event);
   };
 }
 
@@ -2070,6 +2142,79 @@ function stopKeepWebviewAlive() {
 }
 
 // ----------------------------------------------------
+// MULTI-MONITOR VIEWPORT LOGIC
+// ----------------------------------------------------
+function handleIncomingTrack(event) {
+  const [stream] = event.streams;
+  const track = event.track;
+  console.log(`Received incoming remote track: id=${track.id}, kind=${track.kind}`);
+  
+  if (track.kind === "video") {
+    const targetStream = stream || new MediaStream([track]);
+    
+    // Add to remoteStreams tracking if not already present
+    if (!remoteStreams.some(s => s.id === targetStream.id)) {
+      remoteStreams.push(targetStream);
+    }
+    
+    // Assign stream to corresponding video element
+    if (remoteStreams.length === 1) {
+      remoteScreenVideo.srcObject = remoteStreams[0];
+      remoteScreenVideo.muted = false;
+      remoteScreenVideo.classList.remove("fallback-hidden");
+      remoteScreenImg.classList.remove("fallback-active");
+      
+      floatingLayoutContainer.style.display = "none";
+      const viewportContainer = document.getElementById("viewport-container");
+      if (viewportContainer) {
+        viewportContainer.className = "remote-viewport-container";
+      }
+
+      remoteScreenVideo.play().catch(e => console.warn("Primary video play failed:", e));
+    } else if (remoteStreams.length > 1) {
+      remoteScreenVideoSecondary.srcObject = remoteStreams[1];
+      remoteScreenVideoSecondary.muted = false;
+      remoteScreenVideoSecondary.classList.remove("fallback-hidden");
+      
+      // Show layout selection overlay controls
+      floatingLayoutContainer.style.display = "flex";
+      
+      // Default to picture-in-picture layout
+      selectRemoteLayout.value = "pip";
+      updateRemoteViewportLayout();
+
+      remoteScreenVideoSecondary.play().catch(e => console.warn("Secondary video play failed:", e));
+    }
+
+    // Update connection status label
+    const targetHostCode = savedHostCode || "";
+    if (remoteStreams.length > 1) {
+      remoteHostInfo.textContent = `Viewing Host: ${targetHostCode.slice(0, 3)} ${targetHostCode.slice(3)} | Dual Monitor stream`;
+    } else {
+      remoteHostInfo.textContent = `Viewing Host: ${targetHostCode.slice(0, 3)} ${targetHostCode.slice(3)} | HD video stream`;
+    }
+  }
+}
+
+function updateRemoteViewportLayout() {
+  const viewportContainer = document.getElementById("viewport-container");
+  if (!viewportContainer) return;
+  
+  const layout = selectRemoteLayout.value;
+  viewportContainer.className = "remote-viewport-container"; // reset classes
+  
+  if (layout === "side-by-side") {
+    viewportContainer.classList.add("layout-side-by-side");
+  } else if (layout === "pip") {
+    viewportContainer.classList.add("layout-pip");
+  } else if (layout === "single-1") {
+    viewportContainer.classList.add("layout-single-1");
+  } else if (layout === "single-2") {
+    viewportContainer.classList.add("layout-single-2");
+  }
+}
+
+// ----------------------------------------------------
 // INITIALIZATION
 // ----------------------------------------------------
 window.addEventListener("DOMContentLoaded", () => {
@@ -2163,6 +2308,12 @@ window.addEventListener("DOMContentLoaded", () => {
       }));
     }
   }).catch(console.error);
+
+  selectRemoteLayout.addEventListener("change", updateRemoteViewportLayout);
+
+  btnClientFullscreen.addEventListener("click", () => {
+    invoke("toggle_fullscreen").catch(console.error);
+  });
 
   viewOnboarding.classList.remove("active");
   showScreen(viewSelection);

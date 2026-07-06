@@ -695,13 +695,13 @@ fn update_capture_params(quality: u8, sleep_ms: u64) {
 }
 
 #[tauri::command]
-fn send_mouse_move(x: f64, y: f64) {
-    input::move_mouse(x, y);
+fn send_mouse_move(x: f64, y: f64, display: Option<usize>) {
+    input::move_mouse(x, y, display);
 }
 
 #[tauri::command]
-fn send_mouse_click(button: u8, down: bool, x: f64, y: f64) {
-    input::click_mouse(button, down, x, y);
+fn send_mouse_click(button: u8, down: bool, x: f64, y: f64, display: Option<usize>) {
+    input::click_mouse(button, down, x, y, display);
 }
 
 #[tauri::command]
@@ -814,6 +814,13 @@ fn js_log(msg: String) {
     println!("[JS LOG] {}", msg);
 }
 
+#[tauri::command]
+fn toggle_fullscreen(window: tauri::Window) {
+    if let Ok(is_fullscreen) = window.is_fullscreen() {
+        let _ = window.set_fullscreen(!is_fullscreen);
+    }
+}
+
 fn main() {
     // Start signaling server automatically in background thread
     tauri::async_runtime::spawn(async {
@@ -843,7 +850,8 @@ fn main() {
             js_log,
             submit_direct_pairing_answer,
             submit_direct_pairing_decline,
-            set_keyboard_hook_active
+            set_keyboard_hook_active,
+            toggle_fullscreen
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

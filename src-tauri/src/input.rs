@@ -14,6 +14,11 @@ mod macos {
 
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
+        fn CGGetActiveDisplayList(
+            max_displays: u32,
+            active_displays: *mut u32,
+            display_count: *mut u32,
+        ) -> i32;
         fn CGMainDisplayID() -> u32;
         fn CGDisplayPixelsWide(display: u32) -> usize;
         fn CGDisplayPixelsHigh(display: u32) -> usize;
@@ -32,10 +37,24 @@ mod macos {
         fn CFRelease(cf: *mut std::ffi::c_void);
     }
 
-    pub fn move_mouse(x_norm: f64, y_norm: f64) {
-        let display_id = unsafe { CGMainDisplayID() };
-        let w = unsafe { CGDisplayPixelsWide(display_id) } as f64;
-        let h = unsafe { CGDisplayPixelsHigh(display_id) } as f64;
+    pub fn move_mouse(x_norm: f64, y_norm: f64, display: Option<usize>) {
+        let mut display_ids = [0u32; 16];
+        let mut count = 0u32;
+        let active_display_id = unsafe {
+            let res = CGGetActiveDisplayList(16, display_ids.as_mut_ptr(), &mut count);
+            if res == 0 && count > 0 {
+                let idx = display.unwrap_or(0);
+                if idx < count as usize {
+                    display_ids[idx]
+                } else {
+                    CGMainDisplayID()
+                }
+            } else {
+                CGMainDisplayID()
+            }
+        };
+        let w = unsafe { CGDisplayPixelsWide(active_display_id) } as f64;
+        let h = unsafe { CGDisplayPixelsHigh(active_display_id) } as f64;
         let pos = CGPoint { x: x_norm * w, y: y_norm * h };
 
         let left_down = LEFT_DOWN.load(Ordering::Relaxed);
@@ -58,10 +77,24 @@ mod macos {
         }
     }
 
-    pub fn click_mouse(button: u8, down: bool, x_norm: f64, y_norm: f64) {
-        let display_id = unsafe { CGMainDisplayID() };
-        let w = unsafe { CGDisplayPixelsWide(display_id) } as f64;
-        let h = unsafe { CGDisplayPixelsHigh(display_id) } as f64;
+    pub fn click_mouse(button: u8, down: bool, x_norm: f64, y_norm: f64, display: Option<usize>) {
+        let mut display_ids = [0u32; 16];
+        let mut count = 0u32;
+        let active_display_id = unsafe {
+            let res = CGGetActiveDisplayList(16, display_ids.as_mut_ptr(), &mut count);
+            if res == 0 && count > 0 {
+                let idx = display.unwrap_or(0);
+                if idx < count as usize {
+                    display_ids[idx]
+                } else {
+                    CGMainDisplayID()
+                }
+            } else {
+                CGMainDisplayID()
+            }
+        };
+        let w = unsafe { CGDisplayPixelsWide(active_display_id) } as f64;
+        let h = unsafe { CGDisplayPixelsHigh(active_display_id) } as f64;
         let pos = CGPoint { x: x_norm * w, y: y_norm * h };
 
         let (mouse_type, mouse_btn) = match button {
@@ -167,34 +200,55 @@ mod windows {
         MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP,
     };
 
-    pub fn move_mouse(x_norm: f64, y_norm: f64) {
+    pub fn move_mouse(x_norm: f64, y_norm: f64, display: Option<usize>) {
         unsafe {
-            // Map 0.0..1.0 coordinate to 0..65535 coordinate expected by MOUSEEVENTF_ABSOLUTE
-            let x = (x_norm * 65535.0) as i32;
-            let y = (y_norm * 65535.0) as i32;
-
+            use windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics;
+            let mon_count = GetSystemMetrics(80); // SM_CMONITORS = 80
+            
             let mut input = INPUT {
                 r#type: INPUT_MOUSE,
                 Anonymous: mem::zeroed(),
             };
 
-            input.Anonymous.mi = MOUSEINPUT {
-                dx: x,
-                dy: y,
-                mouseData: 0,
-                dwFlags: MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
-                time: 0,
-                dwExtraInfo: 0,
-            };
+            // MOUSEEVENTF_VIRTUALDESK = 0x4000
+            if mon_count > 1 {
+                let idx = display.unwrap_or(0);
+                let x_mapped = if idx == 1 {
+                    0.5 + x_norm / 2.0
+                } else {
+                    x_norm / 2.0
+                };
+                let x = (x_mapped * 65535.0) as i32;
+                let y = (y_norm * 65535.0) as i32;
+                input.Anonymous.mi = MOUSEINPUT {
+                    dx: x,
+                    dy: y,
+                    mouseData: 0,
+                    dwFlags: MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | 0x4000,
+                    time: 0,
+                    dwExtraInfo: 0,
+                };
+            } else {
+                let x = (x_norm * 65535.0) as i32;
+                let y = (y_norm * 65535.0) as i32;
+                input.Anonymous.mi = MOUSEINPUT {
+                    dx: x,
+                    dy: y,
+                    mouseData: 0,
+                    dwFlags: MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
+                    time: 0,
+                    dwExtraInfo: 0,
+                };
+            }
 
             SendInput(1, &input, mem::size_of::<INPUT>() as i32);
         }
     }
 
-    pub fn click_mouse(button: u8, down: bool, x_norm: f64, y_norm: f64) {
+    pub fn click_mouse(button: u8, down: bool, x_norm: f64, y_norm: f64, display: Option<usize>) {
         unsafe {
             // First move to coordinate
-            move_mouse(x_norm, y_norm);
+            move_mouse(x_norm, y_norm, display);
 
             let dw_flags = match button {
                 0 => {
@@ -255,8 +309,8 @@ pub use windows::{click_mouse, key_event, move_mouse};
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod fallback {
-    pub fn move_mouse(_x: f64, _y: f64) {}
-    pub fn click_mouse(_button: u8, _down: bool, _x: f64, _y: f64) {}
+    pub fn move_mouse(_x: f64, _y: f64, _display: Option<usize>) {}
+    pub fn click_mouse(_button: u8, _down: bool, _x: f64, _y: f64, _display: Option<usize>) {}
     pub fn key_event(_keycode: u16, _down: bool) {}
 }
 

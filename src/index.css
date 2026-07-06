@@ -712,6 +712,7 @@ select {
 }
 
 #remote-screen-video,
+#remote-screen-video-secondary,
 #remote-screen-img {
   width: auto;
   height: auto;
@@ -725,6 +726,111 @@ select {
   background: #000;
 }
 
+.video-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.video-wrapper video {
+  width: 100%;
+  height: auto;
+  max-height: 90vh;
+  object-fit: contain;
+  cursor: none;
+  outline: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--rounded-md);
+  background: #000;
+}
+
+/* Multi-monitor viewport layouts */
+.remote-viewport-container.layout-side-by-side {
+  flex-direction: row;
+  gap: 16px;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.remote-viewport-container.layout-side-by-side .video-wrapper {
+  flex: 1;
+  max-width: 48vw;
+  max-height: 90vh;
+  display: flex !important;
+}
+
+.remote-viewport-container.layout-side-by-side video {
+  width: 100%;
+  height: auto;
+  max-height: 80vh;
+}
+
+.remote-viewport-container.layout-pip {
+  position: relative;
+}
+
+.remote-viewport-container.layout-pip #video-wrapper-primary {
+  width: auto;
+  height: auto;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex !important;
+}
+
+.remote-viewport-container.layout-pip #video-wrapper-secondary {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  width: 320px;
+  height: 180px;
+  z-index: 100;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  background: #000;
+  overflow: hidden;
+  display: flex !important;
+}
+
+.remote-viewport-container.layout-pip #video-wrapper-secondary video {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border: none;
+  border-radius: 0;
+}
+
+.remote-viewport-container.layout-single-1 #video-wrapper-primary {
+  display: flex !important;
+}
+
+.remote-viewport-container.layout-single-1 #video-wrapper-secondary {
+  display: none !important;
+}
+
+.remote-viewport-container.layout-single-2 #video-wrapper-primary {
+  display: none !important;
+}
+
+.remote-viewport-container.layout-single-2 #video-wrapper-secondary {
+  display: flex !important;
+  width: auto;
+  height: auto;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.remote-viewport-container.layout-single-2 #video-wrapper-secondary video {
+  width: 100%;
+  height: auto;
+  max-height: 90vh;
+}
+
 #remote-screen-img {
   display: none;
 }
@@ -733,7 +839,8 @@ select {
   display: block;
 }
 
-#remote-screen-video.fallback-hidden {
+#remote-screen-video.fallback-hidden,
+#remote-screen-video-secondary.fallback-hidden {
   display: none;
 }
 

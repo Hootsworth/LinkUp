@@ -242,6 +242,15 @@
             <span id="hud-rate">-- Mbps</span>
           </div>
 
+          <div class="floating-layout-select" id="floating-layout-container" style="display: none; align-items: center; gap: 4px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0 4px; height: 32px; box-sizing: border-box;">
+            <select id="select-remote-layout" style="background: transparent; color: white; border: none; font-size: 11px; font-family: var(--font-display); outline: none; cursor: pointer;">
+              <option value="single-1" style="background: var(--charcoal); color: white;">Display 1</option>
+              <option value="single-2" style="background: var(--charcoal); color: white;">Display 2</option>
+              <option value="side-by-side" style="background: var(--charcoal); color: white;">Side-by-Side</option>
+              <option value="pip" style="background: var(--charcoal); color: white;">Picture-in-Picture</option>
+            </select>
+          </div>
+
           <button class="btn btn-secondary btn-sm" id="btn-transfer-file" title="Send File" style="background: transparent; border-color: rgba(255,255,255,0.2); color: white; padding: 0 8px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;">
             <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -251,11 +260,22 @@
           </button>
           <input type="file" id="input-file-select" style="display: none;">
 
+          <button class="btn btn-secondary btn-sm" id="btn-client-fullscreen" title="Toggle Fullscreen" style="background: transparent; border-color: rgba(255,255,255,0.2); color: white; padding: 0 8px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+            </svg>
+          </button>
+
           <button class="btn btn-danger btn-sm" id="btn-client-disconnect">Disconnect</button>
         </div>
 
         <div class="remote-viewport-container" id="viewport-container">
-          <video id="remote-screen-video" autoplay playsinline muted tabindex="0"></video>
+          <div class="video-wrapper active" id="video-wrapper-primary">
+            <video id="remote-screen-video" autoplay playsinline muted tabindex="0"></video>
+          </div>
+          <div class="video-wrapper" id="video-wrapper-secondary" style="display: none;">
+            <video id="remote-screen-video-secondary" autoplay playsinline muted tabindex="0"></video>
+          </div>
           <img id="remote-screen-img" src="" alt="Waiting for remote screen stream..." tabindex="0">
           
           <!-- Local cursor echo overlay -->
@@ -288,16 +308,26 @@
               <input type="text" id="input-sig-url" value="ws://localhost:8080" placeholder="ws://...">
             </div>
             <div class="form-group" style="grid-column: span 2; margin-bottom: 0;">
-              <label for="input-turn-url">TURN Server URL</label>
-              <input type="text" id="input-turn-url" value="" placeholder="turn:ip:port (optional)">
+              <label for="select-turn-profile">ICE / Traversal Profile</label>
+              <select id="select-turn-profile">
+                <option value="stun-only">STUN Only (Direct P2P, No Relay)</option>
+                <option value="community" selected>LinkUp Community TURN Relay (Recommended)</option>
+                <option value="custom">Custom STUN/TURN Configuration</option>
+              </select>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label for="input-turn-user">TURN Username</label>
-              <input type="text" id="input-turn-user" value="linkupuser" placeholder="User">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label for="input-turn-pass">TURN Password</label>
-              <input type="password" id="input-turn-pass" value="linkuppassword" placeholder="Pass">
+            <div id="custom-turn-fields" style="grid-column: span 2; display: none; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%;">
+              <div class="form-group" style="grid-column: span 2; margin-bottom: 0;">
+                <label for="input-turn-url">TURN Server URL</label>
+                <input type="text" id="input-turn-url" value="" placeholder="turn:ip:port">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="input-turn-user">TURN Username</label>
+                <input type="text" id="input-turn-user" value="linkupuser" placeholder="User">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="input-turn-pass">TURN Password</label>
+                <input type="password" id="input-turn-pass" value="linkuppassword" placeholder="Pass">
+              </div>
             </div>
             <div class="form-group" id="settings-display-field" style="grid-column: span 2; margin-bottom: 0;">
               <label for="select-display">Capture Display</label>
